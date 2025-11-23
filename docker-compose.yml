@@ -1,0 +1,328 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: p2p_postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/backups:/backups
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-p2p_procurement}
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - p2p_network
+      - db_network
+    restart: unless-stopped
+    command: 
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+
+  # PostgreSQL Database with Development Ports
+  db_dev_ports:
+    extends: db
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+    profiles:
+      - dev-ports
+
+  # pgAdmin - PostgreSQL Management Interface
+
+  # Redis Cache & Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: p2p_redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_dev_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  # Redis Cache & Message Broker with Development Ports
+  redis_dev_ports:
+    extends: redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    profiles:
+      - dev-ports
+
+
+  # Django Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: p2p_backend
+    command: >
+      gunicorn
+      --bind 0.0.0.0:8000
+      --workers ${GUNICORN_WORKERS:-4}
+      --threads ${GUNICORN_THREADS:-2}
+      --worker-class ${GUNICORN_WORKER_CLASS:-sync}
+      --timeout ${GUNICORN_TIMEOUT:-300}
+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
+      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50}
+      --access-logfile -
+      --error-logfile -
+      --log-level ${LOG_LEVEL:-info}
+      --chdir /app/src
+      config.wsgi:application
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/keys:/app/keys
+      - static_files:/app/static
+      - media_files:/app/media
+      - backend_logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      # Core Django
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.development}
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: ${DEBUG:-True}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      
+      # Database URL (PostgreSQL) - Single URL instead of multiple variables
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Redis URLs - Simplified to just URLs
+      REDIS_URL: ${REDIS_URL}
+      CACHE_URL: ${CACHE_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      
+      # CORS
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      
+      # File Storage
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-52428800}
+      
+      # Superuser Creation
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-}
+      DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL:-}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-}
+      
+      # Logging
+      DJANGO_LOG_LEVEL: ${DJANGO_LOG_LEVEL:-DEBUG}
+      
+      # Security (Development)
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-False}
+      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-False}
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
+      
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+      - db_network  
+      - app_network
+      - db_network  # Access to isolated database
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=5)\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: p2p_celery_worker
+    command: celery -A config worker --loglevel=${CELERY_WORKER_LOG_LEVEL:-info} --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/keys:/app/keys
+      - media_files:/app/media
+      - backend_logs:/app/logs
+    environment:
+      # Core Django
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.development}
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: ${DEBUG:-True}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      
+      # Database URL (PostgreSQL)
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Redis URLs
+      REDIS_URL: ${REDIS_URL}
+      CACHE_URL: ${CACHE_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - app_network
+      - db_network
+    restart: unless-stopped
+
+  # Celery Beat (Scheduler)
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: p2p_celery_beat
+    command: celery -A config beat --loglevel=${CELERY_BEAT_LOG_LEVEL:-info}
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/keys:/app/keys
+      - backend_logs:/app/logs
+    environment:
+      # Core Django
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.development}
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: ${DEBUG:-True}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      
+      # Database URL (PostgreSQL)
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Redis URLs
+      REDIS_URL: ${REDIS_URL}
+      CACHE_URL: ${CACHE_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+      - db_network
+    restart: unless-stopped
+
+
+  # React Frontend (Internal - not exposed directly)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        VITE_APP_TITLE: ${VITE_APP_TITLE:-P2P Procurement System}
+    container_name: p2p_frontend
+    expose:
+      - "3000"
+    networks:
+      - app_network  # Changed from p2p_network to app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Gateway - Unified entry point for all services
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: p2p_nginx_gateway
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    # Remove depends_on to avoid circular dependency issues
+    networks:
+      - app_network  # Only need app_network to communicate with backend and frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - nginx_logs:/var/log/nginx
+
+  # Nginx Proxy Manager (Optional - for advanced SSL/domain management)
+  # Uncomment if you need a web UI for managing nginx configurations
+  # nginx-proxy-manager:
+  #   image: 'jc21/nginx-proxy-manager:latest'
+  #   container_name: p2p_nginx_proxy_manager
+  #   ports:
+  #     - '80:80'
+  #     - '443:443'
+  #     - '81:81'
+  #   environment:
+  #     DB_SQLITE_FILE: "/data/database.sqlite"
+  #   volumes:
+  #     - nginx_proxy_data:/data
+  #     - nginx_proxy_letsencrypt:/etc/letsencrypt
+  #   networks:
+  #     - p2p_network
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  static_files:
+    driver: local
+  media_files:
+    driver: local
+  backend_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+  # nginx_proxy_data:
+  #   driver: local
+  # nginx_proxy_letsencrypt:
+  #   driver: local
+
+networks:
+  p2p_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+  
+  # Application network for backend services
+  app_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.27.0.0/16
+  
+  # Isolated network for database - only backend can access
+  db_network:
+    driver: bridge
+    internal: false

@@ -1,0 +1,157 @@
+#!/bin/bash
+# ============================================================================
+# Enhanced Docker Entrypoint for Django Backend
+# ============================================================================
+# Handles database migrations, static files, superuser creation,
+# and graceful startup with comprehensive error handling
+# ============================================================================
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "========================================"
+echo " P2P Procurement Backend Starting"
+echo " Environment: ${ENVIRONMENT:-development}"
+echo "========================================"
+
+# ============================================================================
+# GENERATE JWT KEYS
+# ============================================================================
+echo -e "${YELLOW}[1/7] Checking JWT keys...${NC}"
+
+mkdir -p /app/keys
+
+if [ ! -f /app/keys/jwt_private.pem ]; then
+    echo "Generating new JWT private key..."
+    openssl genrsa -out /app/keys/jwt_private.pem 2048
+fi
+
+if [ ! -f /app/keys/jwt_public.pem ]; then
+    echo "Generating new JWT public key..."
+    openssl rsa -in /app/keys/jwt_private.pem -outform PEM -pubout -out /app/keys/jwt_public.pem
+fi
+
+echo -e "${GREEN}✓ JWT keys ready${NC}"
+
+# ============================================================================
+# WAIT FOR DATABASE
+# ============================================================================
+echo -e "${YELLOW}[2/7] Waiting for database...${NC}"
+
+MAX_RETRIES=30
+RETRY_COUNT=0
+
+until python -c "import psycopg2, os; conn = psycopg2.connect(os.environ['DATABASE_URL']); conn.close()"  > /dev/null 2>&1; do
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    
+    if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+        echo -e "${RED}ERROR: Database connection timeout after ${MAX_RETRIES} attempts${NC}"
+        # Try to run without silencing output to show the actual error
+        python -c "import psycopg2, os; conn = psycopg2.connect(os.environ['DATABASE_URL']); print('Connection successful'); conn.close()"
+        exit 1
+    fi
+    
+    echo "Database unavailable - waiting (attempt $RETRY_COUNT/$MAX_RETRIES)"
+    sleep 1
+done
+
+echo -e "${GREEN}✓ Database connection established${NC}"
+
+# ============================================================================
+# RUN MIGRATIONS
+# ============================================================================
+echo -e "${YELLOW}[3/7] Running database migrations...${NC}"
+
+cd /app/src
+
+if python manage.py migrate --noinput; then
+    echo -e "${GREEN}✓ Migrations completed successfully${NC}"
+else
+    echo -e "${RED}ERROR: Migration failed${NC}"
+    exit 1
+fi
+
+# ============================================================================
+# COLLECT STATIC FILES
+# ============================================================================
+echo -e "${YELLOW}[3/6] Collecting static files...${NC}"
+
+if python manage.py collectstatic --noinput --clear; then
+    echo -e "${GREEN}✓ Static files collected${NC}"
+else
+    echo -e "${YELLOW}⚠ Static file collection failed (non-critical)${NC}"
+fi
+
+# ============================================================================
+# CREATE SUPERUSER (if credentials provided)
+# ============================================================================
+echo -e "${YELLOW}[4/6] Checking superuser creation...${NC}"
+
+if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ]; then
+    echo "Creating superuser if not exists..."
+    
+    python manage.py shell << EOF
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
+username = '$DJANGO_SUPERUSER_USERNAME'
+email = '$DJANGO_SUPERUSER_EMAIL'
+password = '$DJANGO_SUPERUSER_PASSWORD'
+
+if not User.objects.filter(username=username).exists():
+    try:
+        User.objects.create_superuser(
+            username=username,
+            email=email,
+            password=password
+        )
+        print('✓ Superuser created successfully')
+    except Exception as e:
+        print(f'✗ Superuser creation failed: {e}')
+else:
+    print('✓ Superuser already exists')
+EOF
+else
+    echo "Skipping superuser creation (credentials not provided)"
+fi
+
+# ============================================================================
+# CACHE WARMUP (Optional)
+# ============================================================================
+echo -e "${YELLOW}[5/6] Warming up application cache...${NC}"
+
+if [ "${SKIP_CACHE_WARMUP:-false}" != "true" ]; then
+    # Add any cache warmup logic here
+    echo "Cache warmup completed"
+else
+    echo "Cache warmup skipped"
+fi
+
+# ============================================================================
+# HEALTH CHECK
+# ============================================================================
+echo -e "${YELLOW}[6/6] Running pre-flight checks...${NC}"
+
+# Verify critical settings
+python manage.py check --deploy --fail-level WARNING || {
+    echo -e "${YELLOW}⚠ Some deployment checks failed (review above)${NC}"
+}
+
+echo -e "${GREEN}✓ Pre-flight checks completed${NC}"
+
+# ============================================================================
+# START APPLICATION
+# ============================================================================
+echo "========================================"
+echo -e "${GREEN} Starting Application Server${NC}"
+echo " Workers: ${GUNICORN_WORKERS:-4}"
+echo " Timeout: ${GUNICORN_TIMEOUT:-300}s"
+echo "========================================"
+
+# Execute the command passed to docker run
+exec "$@"

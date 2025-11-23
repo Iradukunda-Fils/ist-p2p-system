@@ -1,0 +1,2 @@
+# Add gunicorn to requirements
+gunicorn==21.2.0
