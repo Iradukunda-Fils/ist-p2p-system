@@ -42,20 +42,22 @@ export const Header: React.FC = () => {
             setLogoutResult(result);
             closeLogoutConfirm();
 
+            // Always show success modal for consistent UX
+            openLogoutSuccess();
+
             if (result.success) {
-                openLogoutSuccess();
                 toast.success(`Successfully signed out${result.username ? ` ${result.username}` : ''}`);
             } else {
-                toast.error('Logout completed with issues, but session was cleared');
-                // Still redirect on failure after clearing local state
-                setTimeout(() => navigate('/login'), 1000);
+                toast.warning('Logged out with issues, but session was cleared');
             }
         } catch (error) {
             console.error('[Header] Logout error:', error);
             closeLogoutConfirm();
-            toast.error('Logout failed, but local session was cleared');
-            // Still navigate to login even if logout fails
-            setTimeout(() => navigate('/login'), 1000);
+            
+            // Still show success modal for consistency
+            setLogoutResult({ success: false });
+            openLogoutSuccess();
+            toast.warning('Session cleared locally');
         }
     };
 
@@ -106,6 +108,16 @@ export const Header: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
             ),
+        },
+        {
+            name: 'User Management',
+            href: '/admin/users',
+            icon: (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+            ),
+            roles: ['admin'],
         },
     ];
 
@@ -232,6 +244,16 @@ export const Header: React.FC = () => {
                                         {/* Quick Actions */}
                                         <div className="py-2">
                                             <Link
+                                                to="/profile"
+                                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                                onClick={closeDropdown}
+                                            >
+                                                <svg className="w-4 h-4 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                                Your Profile
+                                            </Link>
+                                            <Link
                                                 to="/dashboard"
                                                 className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                                                 onClick={closeDropdown}
@@ -242,7 +264,7 @@ export const Header: React.FC = () => {
                                                 Dashboard
                                             </Link>
                                             <Link
-                                                to="/requests"
+                                                to={`/requests?created_by=${user.id}`}
                                                 className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                                                 onClick={closeDropdown}
                                             >
@@ -317,7 +339,7 @@ export const Header: React.FC = () => {
                 onClose={closeLogoutSuccess}
                 onRedirect={handleRedirectToLogin}
                 username={logoutResult?.username}
-                autoRedirectDelay={3}
+                autoRedirectDelay={1}
             />
         </header>
     );

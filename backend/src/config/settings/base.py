@@ -93,7 +93,7 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = config('STATIC_ROOT', default=BASE_DIR / 'staticfiles')
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
@@ -302,18 +302,22 @@ LOGGING = {
 # File Upload Settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
+FILE_UPLOAD_TEMP_DIR = BASE_DIR / 'temp_uploads'  # Temporary storage
 FILE_UPLOAD_PERMISSIONS = 0o644
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 
 # Security Settings
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
-# Document Processing Settings
+
 DOCUMENT_PROCESSING = {
-    'MAX_FILE_SIZE': config('DOCUMENT_MAX_FILE_SIZE', default=50 * 1024 * 1024, cast=int),
+    'MAX_FILE_SIZE': config('DOCUMENT_MAX_FILE_SIZE', default=100 * 1024 * 1024, cast=int),  # Updated to 100MB
     'ALLOWED_EXTENSIONS': config('DOCUMENT_ALLOWED_EXTENSIONS', default='.pdf,.png,.jpg,.jpeg,.tiff').split(','),
     'OCR_LANGUAGE': 'eng',
     'OPENAI_API_KEY': config('OPENAI_API_KEY', default=''),
     'OPENAI_MODEL': 'gpt-3.5-turbo',
 }
+
+

@@ -11,48 +11,20 @@ export const Login: React.FC = () => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
     const navigate = useNavigate();
     const location = useLocation();
-    const { login, isAuthenticated, checkAuth } = useAuthStore();
+    const { login, isAuthenticated } = useAuthStore(); // Removed checkAuth
 
     const from = (location.state as any)?.from?.pathname || '/dashboard';
 
-    // Check for existing authentication on component mount
+    // Redirect if user is already authenticated (AuthGuard handles initial check)
     useEffect(() => {
-        const checkExistingAuth = async () => {
-            try {
-                await checkAuth();
-            } catch (error) {
-                console.error('[Login] Error checking existing auth:', error);
-            } finally {
-                setIsCheckingAuth(false);
-            }
-        };
-
-        checkExistingAuth();
-    }, [checkAuth]);
-
-    // Redirect if user is already authenticated
-    useEffect(() => {
-        if (!isCheckingAuth && isAuthenticated) {
+        if (isAuthenticated) {
             console.log('[Login] User already authenticated, redirecting to:', from);
             navigate(from, { replace: true });
         }
-    }, [isAuthenticated, isCheckingAuth, navigate, from]);
-
-    // Show loading spinner while checking authentication
-    if (isCheckingAuth) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Checking authentication...</p>
-                </div>
-            </div>
-        );
-    }
+    }, [isAuthenticated, navigate, from]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

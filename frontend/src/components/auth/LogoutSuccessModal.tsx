@@ -16,7 +16,7 @@ export const LogoutSuccessModal: React.FC<LogoutSuccessModalProps> = ({
   isOpen,
   onClose,
   onRedirect,
-  autoRedirectDelay = 3,
+  autoRedirectDelay = 1, // Reduced from 3 seconds for faster UX
   username
 }) => {
   const [countdown, setCountdown] = React.useState(autoRedirectDelay);

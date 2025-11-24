@@ -14,6 +14,8 @@ const OrderDetail = React.lazy(() => import('@/pages/orders/OrderDetail'));
 const DocumentsList = React.lazy(() => import('@/pages/documents/DocumentsList'));
 const DocumentDetail = React.lazy(() => import('@/pages/documents/DocumentDetail'));
 const DocumentUpload = React.lazy(() => import('@/pages/documents/DocumentUpload'));
+const UserManagement = React.lazy(() => import('@/pages/admin/UserManagement').then(m => ({ default: m.UserManagement })));
+const UserProfile = React.lazy(() => import('@/pages/profile/UserProfile').then(m => ({ default: m.UserProfile })));
 const AuthDiagnostic = React.lazy(() => import('@/pages/AuthDiagnostic'));
 
 export const AppRoutes: React.FC = () => {
@@ -102,6 +104,26 @@ export const AppRoutes: React.FC = () => {
                         element={
                             <ProtectedRoute>
                                 <DocumentUpload />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* Admin Routes */}
+                    <Route
+                        path="/admin/users"
+                        element={
+                            <ProtectedRoute roles={['admin']}>
+                                <UserManagement />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* Profile Route */}
+                    <Route
+                        path="/profile"
+                        element={
+                            <ProtectedRoute>
+                                <UserProfile />
                             </ProtectedRoute>
                         }
                     />

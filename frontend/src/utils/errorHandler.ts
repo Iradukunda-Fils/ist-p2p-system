@@ -123,8 +123,18 @@ function isAxiosError(error: unknown): error is AxiosError<APIErrorResponse> {
  */
 export function showErrorToast(error: unknown, fallback: string = 'An error occurred'): void {
     const message = extractErrorMessage(error, fallback);
+    
+    // Handle specific upload errors with longer display time
+    const isUploadError = isAxiosError(error) && (
+        error.response?.status === 413 || // Payload Too Large
+        error.response?.status === 422 || // Unprocessable Entity (validation)
+        error.code === 'ECONNABORTED' ||  // Timeout
+        message.toLowerCase().includes('upload') ||
+        message.toLowerCase().includes('file')
+    );
+    
     toast.error(message, {
-        autoClose: 5000,
+        autoClose: isUploadError ? 8000 : 5000, // Longer for upload errors
         hideProgressBar: false,
         closeOnClick: true,
         pauseOnHover: true,

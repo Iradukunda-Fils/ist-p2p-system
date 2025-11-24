@@ -61,3 +61,14 @@ export const truncate = (text: string, length: number): string => {
     if (text.length <= length) return text;
     return text.slice(0, length) + '...';
 };
+
+/**
+ * Format file size in bytes to human-readable format
+ */
+export const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+};
+

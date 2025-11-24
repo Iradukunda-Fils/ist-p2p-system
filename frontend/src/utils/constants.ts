@@ -70,11 +70,12 @@ export const APPROVAL_THRESHOLDS = {
 
 // File upload constraints
 export const FILE_UPLOAD = {
-    MAX_SIZE: 10 * 1024 * 1024, // 10MB
+    MAX_SIZE: 50 * 1024 * 1024, // 50MB (matches backend and nginx)
     ALLOWED_TYPES: {
-        PROFORMA: ['application/pdf', 'image/png', 'image/jpeg'],
-        RECEIPT: ['application/pdf', 'image/png', 'image/jpeg'],
+        PROFORMA: ['application/pdf', 'image/png', 'image/jpeg', 'image/tiff'],
+        RECEIPT: ['application/pdf', 'image/png', 'image/jpeg', 'image/tiff'],
     },
+    ALLOWED_EXTENSIONS: ['.pdf', '.png', '.jpg', '.jpeg', '.tiff'],
 } as const;
 
 // Pagination

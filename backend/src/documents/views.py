@@ -326,6 +326,50 @@ class DocumentViewSet(viewsets.ModelViewSet):
             'failed_processing': status_counts.get('FAILED', 0),
         })
     
+    @action(detail=False, methods=['get'], url_path='upload-progress/(?P<upload_id>[^/.]+)')
+    def upload_progress(self, request, upload_id=None):
+        """
+        Get real-time upload progress for chunked uploads.
+        
+        Returns progress data stored in cache during file upload.
+        This allows frontend to poll for progress updates.
+        
+        Args:
+            upload_id: Unique identifier for the upload
+            
+        Returns:
+            Progress data with status, bytes received, and percentage
+        """
+        from .upload_handlers import get_upload_progress
+        
+        if not upload_id:
+            return Response(
+                {
+                    'error': {
+                        'code': 'MISSING_UPLOAD_ID',
+                        'message': 'Upload ID is required'
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        progress_data = get_upload_progress(upload_id)
+        
+        if progress_data.get('status') == 'not_found':
+            return Response(
+                {
+                    'error': {
+                        'code': 'UPLOAD_NOT_FOUND',
+                        'message': 'Upload not found or expired',
+                        'details': 'Upload progress data may have expired (1 hour timeout)'
+                    }
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        return Response(progress_data)
+
+    
     def _can_access_document(self, document):
         """
         Check if current user can access the given document.

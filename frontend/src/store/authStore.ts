@@ -90,15 +90,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             // Get refresh token before clearing data
             const refreshToken = secureCookieManager.getRefreshToken();
             
-            // Call server logout endpoint to blacklist token
+            // Call server logout endpoint to blacklist token (non-blocking)
             if (refreshToken) {
-                try {
-                    await authApi.logout(refreshToken);
-                    console.log('[Auth] Server logout successful');
-                } catch (error) {
-                    console.warn('[Auth] Server logout failed, proceeding with client logout:', error);
-                    // Continue with client-side logout even if server logout fails
-                }
+                // Fire-and-forget with 2-second timeout to prevent blocking
+                Promise.race([
+                    authApi.logout(refreshToken),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Server logout timeout')), 2000)
+                    )
+                ]).then(
+                    () => console.log('[Auth] Server logout successful'),
+                    (error) => console.warn('[Auth] Server logout skipped/timed out:', error)
+                );
+                // Don't await - continue with client cleanup immediately
             }
 
             // Always perform client-side cleanup regardless of server response
@@ -411,9 +415,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const expiresAt = Date.now() + timeUntilExpiry;
         set({ tokenExpiresAt: expiresAt });
 
-        // Refresh token 2 minutes before expiry (or halfway through if token lifetime is less than 4 minutes)
-        const refreshBuffer = Math.min(2 * 60 * 1000, timeUntilExpiry / 2); // 2 minutes or half the lifetime
-        const refreshTime = Math.max(timeUntilExpiry - refreshBuffer, 30 * 1000); // At least 30 seconds
+        // Refresh token well before expiry to account for network latency
+        // For 60min tokens: refresh at 55min (5 min buffer)
+        // For shorter tokens: refresh halfway through
+        const refreshBuffer = Math.min(5 * 60 * 1000, timeUntilExpiry / 2); // 5 minutes or half the lifetime
+        const refreshTime = Math.max(timeUntilExpiry - refreshBuffer, 60 * 1000); // At least 1 minute
 
         console.log(`[Auth] Token expires in ${Math.round(timeUntilExpiry / 1000)}s, will refresh in ${Math.round(refreshTime / 1000)}s`);
 

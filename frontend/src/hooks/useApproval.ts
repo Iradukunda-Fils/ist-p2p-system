@@ -99,6 +99,8 @@ export const useApproval = ({ requestId, onSuccess }: UseApprovalOptions): UseAp
 
     const reset = () => {
         setComment('');
+        approveMutation.reset();
+        rejectMutation.reset();
     };
 
     return {

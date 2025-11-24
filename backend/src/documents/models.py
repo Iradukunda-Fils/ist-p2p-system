@@ -190,11 +190,17 @@ class Document(models.Model):
             self.title = self.original_filename or f"{self.get_doc_type_display()} Document"
         
         self.full_clean()
+        
+        # Check if this is a new document before saving
+        is_new_document = self.pk is None
+        
         super().save(*args, **kwargs)
         
-        # Trigger processing if this is a new document
-        if not kwargs.get('update_fields') and self.processing_status == 'PENDING':
-            self._trigger_processing()
+        # Trigger processing asynchronously for new documents only
+        if is_new_document and not kwargs.get('update_fields') and self.processing_status == 'PENDING':
+            # Use Django's transaction.on_commit to ensure the document is saved before queuing
+            from django.db import transaction
+            transaction.on_commit(lambda: self._trigger_processing_async())
     
     def __str__(self):
         """

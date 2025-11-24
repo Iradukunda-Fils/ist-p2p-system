@@ -41,6 +41,7 @@ db.sqlite3
 
 # PyCharm / VSCode
 .idea/
+.kiro
 .vscode/
 *.sublime-project
 *.sublime-workspace

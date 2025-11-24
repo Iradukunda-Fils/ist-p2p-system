@@ -3,15 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { documentsApi, DocumentUploadData } from '@/api/documentsApi';
 import { DocumentType } from '@/types';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { FileUpload } from '@/components/common/FileUpload';
 import { showErrorToast, showSuccessToast } from '@/utils/errorHandler';
+import { validateFileSize, validateFileType } from '@/utils/validationUtils';
+import { FILE_UPLOAD } from '@/utils/constants';
 
 /**
  * Document upload component with drag-and-drop support
  */
+type UploadState = 'idle' | 'uploading' | 'success' | 'error';
+
 export const DocumentUpload: React.FC = () => {
     const navigate = useNavigate();
-    const [uploading, setUploading] = useState(false);
-    const [dragActive, setDragActive] = useState(false);
+    const [uploadState, setUploadState] = useState<UploadState>('idle');
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const [formData, setFormData] = useState<{
         file: File | null;
         doc_type: DocumentType;
@@ -22,76 +28,13 @@ export const DocumentUpload: React.FC = () => {
         title: '',
     });
 
-    // File size limit (50MB per backend config)
-    const MAX_FILE_SIZE = 50 * 1024 * 1024;
-    
-    // Allowed extensions per backend config
-    const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.tiff'];
-
-    const validateFile = (file: File): string | null => {
-        // Check file size
-        if (file.size > MAX_FILE_SIZE) {
-            return `File size exceeds 50MB limit (${(file.size / 1024 / 1024).toFixed(2)}MB)`;
-        }
-
-        // Check file extension
-        const extension = '.' + file.name.split('.').pop()?.toLowerCase();
-        if (!ALLOWED_EXTENSIONS.includes(extension)) {
-            return `File type not allowed. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`;
-        }
-
-        return null;
-    };
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            const error = validateFile(file);
-            
-            if (error) {
-                showErrorToast(error);
-                return;
-            }
-
-            setFormData(prev => ({
-                ...prev,
-                file,
-                title: prev.title || file.name.replace(/\.[^/.]+$/, ''), // Auto-fill title from filename
-            }));
-        }
-    };
-
-    const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (e.type === 'dragenter' || e.type === 'dragover') {
-            setDragActive(true);
-        } else if (e.type === 'dragleave') {
-            setDragActive(false);
-        }
-    };
-
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDragActive(false);
-
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            const file = e.dataTransfer.files[0];
-            const error = validateFile(file);
-            
-            if (error) {
-                showErrorToast(error);
-                return;
-            }
-
-            setFormData(prev => ({
-                ...prev,
-                file,
-                title: prev.title || file.name.replace(/\.[^/.]+$/, ''),
-            }));
-        }
+    const handleFileSelect = (file: File) => {
+        setFormData(prev => ({
+            ...prev,
+            file,
+            title: prev.title || file.name.replace(/\.[^/.]+$/, ''), // Auto-fill title from filename
+        }));
+        setUploadError(null); // Clear any previous errors
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -102,7 +45,9 @@ export const DocumentUpload: React.FC = () => {
             return;
         }
 
-        setUploading(true);
+        setUploadState('uploading');
+        setUploadProgress(0);
+        setUploadError(null);
 
         try {
             const uploadData: DocumentUploadData = {
@@ -111,15 +56,52 @@ export const DocumentUpload: React.FC = () => {
                 title: formData.title || undefined,
             };
 
-            const response = await documentsApi.uploadDocument(uploadData);
+            console.log('Starting upload...', uploadData);
+
+            // Create a timeout promise to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                    reject(new Error('Upload timeout - request took longer than 6 minutes'));
+                }, 6 * 60 * 1000); // 6 minutes timeout
+            });
+
+            // Create a custom upload function with progress tracking
+            const uploadPromise = documentsApi.uploadDocument(uploadData, {
+                onProgress: (progress) => {
+                    console.log('Upload progress:', progress + '%');
+                    setUploadProgress(progress);
+                }
+            });
+
+            // Race between upload and timeout
+            const response = await Promise.race([uploadPromise, timeoutPromise]);
             
+            console.log('✅ Upload completed! Response:', response);
+            console.log('Document ID:', response.document?.id);
+            
+            // Set success state and show success message
+            setUploadState('success');
             showSuccessToast(response.message || 'Document uploaded successfully');
-            navigate('/documents');
+            
+            // Check if we have a document ID before navigating
+            if (response.document?.id) {
+                // Wait a moment to show the success state, then navigate
+                setTimeout(() => {
+                    console.log('Navigating to:', `/documents/${response.document.id}`);
+                    navigate(`/documents/${response.document.id}`);
+                }, 1500);
+            } else {
+                console.error('No document ID in response, navigating to documents list');
+                setTimeout(() => {
+                    navigate('/documents');
+                }, 1500);
+            }
+            
         } catch (error) {
-            console.error('Upload error:', error);
+            console.error('❌ Upload error:', error);
+            setUploadState('error');
+            setUploadError(error instanceof Error ? error.message : 'Failed to upload document');
             showErrorToast(error, 'Failed to upload document');
-        } finally {
-            setUploading(false);
         }
     };
 
@@ -140,61 +122,17 @@ export const DocumentUpload: React.FC = () => {
                             Document File *
                         </label>
                         
-                        <div
-                            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                                dragActive 
-                                    ? 'border-blue-500 bg-blue-50' 
-                                    : 'border-gray-300 hover:border-gray-400'
-                            }`}
-                            onDragEnter={handleDrag}
-                            onDragLeave={handleDrag}
-                            onDragOver={handleDrag}
-                            onDrop={handleDrop}
-                        >
-                            {formData.file ? (
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-center">
-                                        <svg className="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    </div>
-                                    <p className="text-sm font-medium text-gray-900">{formData.file.name}</p>
-                                    <p className="text-xs text-gray-500">
-                                        {(formData.file.size / 1024 / 1024).toFixed(2)} MB
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData(prev => ({ ...prev, file: null }))}
-                                        className="text-sm text-red-600 hover:text-red-700 underline"
-                                    >
-                                        Remove file
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                    <div className="flex text-sm text-gray-600">
-                                        <label htmlFor="file-upload" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                                            <span>Upload a file</span>
-                                            <input
-                                                id="file-upload"
-                                                name="file-upload"
-                                                type="file"
-                                                className="sr-only"
-                                                accept=".pdf,.png,.jpg,.jpeg,.tiff"
-                                                onChange={handleFileChange}
-                                            />
-                                        </label>
-                                        <p className="pl-1">or drag and drop</p>
-                                    </div>
-                                    <p className="text-xs text-gray-500">
-                                        PDF, PNG, JPG, JPEG, TIFF up to 50MB
-                                    </p>
-                                </div>
-                            )}
-                        </div>
+                        <FileUpload
+                            onFileSelect={handleFileSelect}
+                            isLoading={uploadState === 'uploading'}
+                            accept="application/pdf,image/*"
+                            maxSize={FILE_UPLOAD.MAX_SIZE}
+                            label="Upload Document"
+                            error={uploadError}
+                            allowedTypes={['application/pdf', 'image/png', 'image/jpeg', 'image/tiff']}
+                            showProgress={uploadState === 'uploading'}
+                            uploadProgress={uploadProgress}
+                        />
                     </div>
 
                     {/* Document Type */}
@@ -241,22 +179,46 @@ export const DocumentUpload: React.FC = () => {
                             type="button"
                             onClick={() => navigate('/documents')}
                             className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                            disabled={uploading}
+                            disabled={uploadState === 'uploading'}
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            disabled={uploading || !formData.file}
-                            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center"
+                            disabled={uploadState === 'uploading' || uploadState === 'success' || !formData.file}
+                            className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed flex items-center ${
+                                uploadState === 'success' 
+                                    ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' 
+                                    : uploadState === 'error'
+                                    ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+                                    : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+                            } ${
+                                (uploadState === 'uploading' || uploadState === 'success' || !formData.file) 
+                                    ? 'opacity-75' 
+                                    : ''
+                            }`}
                         >
-                            {uploading ? (
+                            {uploadState === 'uploading' ? (
                                 <>
                                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
                                     Uploading...
+                                </>
+                            ) : uploadState === 'success' ? (
+                                <>
+                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Success! Redirecting...
+                                </>
+                            ) : uploadState === 'error' ? (
+                                <>
+                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Try Again
                                 </>
                             ) : (
                                 'Upload Document'

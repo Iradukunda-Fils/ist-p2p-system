@@ -81,10 +81,14 @@ fi
 # ============================================================================
 echo -e "${YELLOW}[3/6] Collecting static files...${NC}"
 
-if python manage.py collectstatic --noinput --clear; then
-    echo -e "${GREEN}✓ Static files collected${NC}"
+if [ "${SKIP_COLLECTSTATIC:-false}" != "true" ]; then
+    if python manage.py collectstatic --noinput --clear; then
+        echo -e "${GREEN}✓ Static files collected${NC}"
+    else
+        echo -e "${YELLOW}⚠ Static file collection failed (non-critical)${NC}"
+    fi
 else
-    echo -e "${YELLOW}⚠ Static file collection failed (non-critical)${NC}"
+    echo "Skipping static file collection"
 fi
 
 # ============================================================================

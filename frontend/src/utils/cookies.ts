@@ -16,9 +16,10 @@ const COOKIES = {
 
 // Cookie security configuration
 const COOKIE_CONFIG = {
-    // Access token expires in 15 minutes (short-lived for security)
-    ACCESS_TOKEN_EXPIRY_MINUTES: 15,
-    // Refresh token expires in 7 days
+    // Access token cookie expiry - MUST match backend JWT lifetime (60 minutes)
+    // Backend: SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'] = timedelta(minutes=60)
+    ACCESS_TOKEN_EXPIRY_MINUTES: 60,
+    // Refresh token expires in 7 days (matches backend)
     REFRESH_TOKEN_EXPIRY_DAYS: 7,
     // User data expires in 7 days
     USER_DATA_EXPIRY_DAYS: 7,

@@ -7,7 +7,6 @@ import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
-import { Typography, Heading } from '@/components/common/Typography';
 import { VStack, HStack } from '@/components/common/Spacing';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 import { SimpleBarChart } from '@/components/common/SimpleBarChart';

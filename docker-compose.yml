@@ -129,6 +129,9 @@ services:
       CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-False}
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
       
+      # Static Files
+      STATIC_ROOT: /app/static
+      
     depends_on:
       db:
         condition: service_healthy
@@ -137,8 +140,6 @@ services:
     networks:
       - app_network
       - db_network  
-      - app_network
-      - db_network  # Access to isolated database
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=5)\" || exit 1"]
@@ -182,6 +183,9 @@ services:
       CACHE_URL: ${CACHE_URL}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      
+      # Skip static collection in worker
+      SKIP_COLLECTSTATIC: "true"
     depends_on:
       db:
         condition: service_healthy
@@ -220,6 +224,9 @@ services:
       CACHE_URL: ${CACHE_URL}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      
+      # Skip static collection in beat
+      SKIP_COLLECTSTATIC: "true"
     depends_on:
       db:
         condition: service_healthy

@@ -29,6 +29,13 @@ export interface DocumentUploadData {
 }
 
 /**
+ * Document upload options
+ */
+export interface DocumentUploadOptions {
+    onProgress?: (progress: number) => void;
+}
+
+/**
  * Document metadata update data
  */
 export interface DocumentMetadata {
@@ -79,7 +86,7 @@ export const documentsApi = {
     /**
      * Upload new document
      */
-    uploadDocument: async (data: DocumentUploadData): Promise<DocumentUploadResponse> => {
+    uploadDocument: async (data: DocumentUploadData, options?: DocumentUploadOptions): Promise<DocumentUploadResponse> => {
         const formData = new FormData();
         formData.append('file', data.file);
         formData.append('doc_type', data.doc_type);
@@ -90,7 +97,21 @@ export const documentsApi = {
 
         const response = await apiClient.post<DocumentUploadResponse>(
             '/documents/',
-            formData
+            formData,
+            {
+                timeout: 300000, // 5 minutes for large file uploads
+                onUploadProgress: (progressEvent) => {
+                    if (progressEvent.total) {
+                        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        console.log(`Upload progress: ${percentCompleted}%`);
+                        
+                        // Call the progress callback if provided
+                        if (options?.onProgress) {
+                            options.onProgress(percentCompleted);
+                        }
+                    }
+                },
+            }
         );
         return response.data;
     },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { documentsApi } from '@/api/documentsApi';
@@ -9,9 +9,11 @@ import { Spinner } from '@/components/common/Spinner';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { Modal } from '@/components/common/Modal';
 import { Input } from '@/components/common/Input';
-import { formatDateTime } from '@/utils/formatters';
-import { formatFileSize, getStatusVariant, copyToClipboard } from '@/utils/codeCleanup';
+import { FileCard, FilePreviewModal } from '@/components/documents';
+import { formatDateTime, formatFileSize } from '@/utils/formatters';
+import { getStatusVariant, copyToClipboard } from '@/utils/codeCleanup';
 import { useAuthStore } from '@/store/authStore';
+import { useDocumentPreview } from '@/hooks';
 import { DocumentType } from '@/types';
 
 const DocumentDetail: React.FC = () => {
@@ -25,7 +27,7 @@ const DocumentDetail: React.FC = () => {
     const [downloadError, setDownloadError] = useState<string | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [editedDocType, setEditedDocType] = useState<DocumentType>('OTHER');
 
@@ -35,6 +37,9 @@ const DocumentDetail: React.FC = () => {
         queryFn: () => documentsApi.getDocument(id!),
         enabled: !!id,
     });
+
+    // Document preview hook (handles blob URL management)
+    const { previewUrl, isLoading: isPreviewLoading, canPreview } = useDocumentPreview(document || null);
 
     // Update mutation
     const updateMutation = useMutation({
@@ -162,28 +167,7 @@ const DocumentDetail: React.FC = () => {
         );
     }
 
-    const isImage = ['png', 'jpg', 'jpeg', 'bmp', 'tiff'].includes(document.file_extension?.toLowerCase() || '');
-    const isPDF = document.file_extension?.toLowerCase() === 'pdf';
 
-useEffect(() => {
-  if (!document) return;
-  if (isImage || isPDF) {
-    (async () => {
-      try {
-        const blob = await documentsApi.downloadDirectDocument(document.id);
-        const url = window.URL.createObjectURL(blob);
-        setPreviewUrl(url);
-      } catch (e) {
-        console.error('Preview fetch failed:', e);
-      }
-    })();
-    return () => {
-      if (previewUrl) {
-        window.URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }
-}, [document, isImage, isPDF]);
 
     return (
         <MainLayout>
@@ -206,10 +190,16 @@ useEffect(() => {
                     <StatusBadge status={getStatusVariant(document.processing_status)} />
                 </div>
 
-                {/* Document Preview */}
-                {(isImage || isPDF) && previewUrl && (
-                    <Card title="Document Preview">
-                        <img src={previewUrl} alt="Document Preview" className="w-full h-auto" />
+                {/* Document File Card - NEW */}
+                {document && (
+                    <Card title="Document File">
+                        <FileCard
+                            document={document}
+                            onDownload={handleDownload}
+                            onEdit={canEdit ? handleEditClick : undefined}
+                            onDelete={canDelete ? () => setIsDeleteModalOpen(true) : undefined}
+                            onPreview={canPreview ? () => setIsPreviewModalOpen(true) : undefined}
+                        />
                     </Card>
                 )}
 
@@ -443,6 +433,15 @@ useEffect(() => {
                     </div>
                 </div>
             </Modal>
+
+            {/* File Preview Modal */}
+            <FilePreviewModal
+                isOpen={isPreviewModalOpen}
+                onClose={() => setIsPreviewModalOpen(false)}
+                document={document || null}
+                previewUrl={previewUrl}
+                onDownload={handleDownload}
+            />
         </MainLayout>
     );
 };
