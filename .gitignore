@@ -27,6 +27,7 @@ ENV/
 
 # Local settings
 *.local
+.kiro
 *.secret
 *.bak
 *.swp
