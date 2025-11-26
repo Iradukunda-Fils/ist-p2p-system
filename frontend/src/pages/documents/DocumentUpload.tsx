@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { documentsApi, DocumentUploadData } from '@/api/documentsApi';
+import { documentsApi, DocumentUploadData, DocumentUploadResponse } from '@/api/documentsApi';
 import { DocumentType } from '@/types';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { FileUpload } from '@/components/common/FileUpload';
 import { showErrorToast, showSuccessToast } from '@/utils/errorHandler';
-import { validateFileSize, validateFileType } from '@/utils/validationUtils';
+import { logger } from '@/utils/logger';
 import { FILE_UPLOAD } from '@/utils/constants';
 
 /**
@@ -17,7 +17,7 @@ export const DocumentUpload: React.FC = () => {
     const navigate = useNavigate();
     const [uploadState, setUploadState] = useState<UploadState>('idle');
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [uploadError, setUploadError] = useState<string | null>(null);
+    const [uploadError, setUploadError] = useState<string | undefined>(undefined);
     const [formData, setFormData] = useState<{
         file: File | null;
         doc_type: DocumentType;
@@ -34,7 +34,7 @@ export const DocumentUpload: React.FC = () => {
             file,
             title: prev.title || file.name.replace(/\.[^/.]+$/, ''), // Auto-fill title from filename
         }));
-        setUploadError(null); // Clear any previous errors
+        setUploadError(undefined); // Clear any previous errors
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -47,7 +47,7 @@ export const DocumentUpload: React.FC = () => {
 
         setUploadState('uploading');
         setUploadProgress(0);
-        setUploadError(null);
+        setUploadError(undefined);
 
         try {
             const uploadData: DocumentUploadData = {
@@ -56,10 +56,10 @@ export const DocumentUpload: React.FC = () => {
                 title: formData.title || undefined,
             };
 
-            console.log('Starting upload...', uploadData);
+            logger.info('Starting upload...', { context: 'Upload', data: uploadData });
 
             // Create a timeout promise to prevent hanging
-            const timeoutPromise = new Promise((_, reject) => {
+            const timeoutPromise = new Promise<DocumentUploadResponse>((_, reject) => {
                 setTimeout(() => {
                     reject(new Error('Upload timeout - request took longer than 6 minutes'));
                 }, 6 * 60 * 1000); // 6 minutes timeout
@@ -67,8 +67,8 @@ export const DocumentUpload: React.FC = () => {
 
             // Create a custom upload function with progress tracking
             const uploadPromise = documentsApi.uploadDocument(uploadData, {
-                onProgress: (progress) => {
-                    console.log('Upload progress:', progress + '%');
+                onProgress: (progress: number) => {
+                    logger.debug(`Upload progress: ${progress}%`, { context: 'Upload' });
                     setUploadProgress(progress);
                 }
             });
@@ -76,8 +76,8 @@ export const DocumentUpload: React.FC = () => {
             // Race between upload and timeout
             const response = await Promise.race([uploadPromise, timeoutPromise]);
             
-            console.log('✅ Upload completed! Response:', response);
-            console.log('Document ID:', response.document?.id);
+            logger.info('Upload completed', { context: 'Upload', data: { response } });
+            logger.debug(`Document ID: ${response.document?.id}`, { context: 'Upload' });
             
             // Set success state and show success message
             setUploadState('success');
@@ -87,18 +87,18 @@ export const DocumentUpload: React.FC = () => {
             if (response.document?.id) {
                 // Wait a moment to show the success state, then navigate
                 setTimeout(() => {
-                    console.log('Navigating to:', `/documents/${response.document.id}`);
+                    logger.info(`Navigating to: /documents/${response.document.id}`, { context: 'Upload' });
                     navigate(`/documents/${response.document.id}`);
                 }, 1500);
             } else {
-                console.error('No document ID in response, navigating to documents list');
+                logger.error('No document ID in response, navigating to documents list', undefined, { context: 'Upload' });
                 setTimeout(() => {
                     navigate('/documents');
                 }, 1500);
             }
             
         } catch (error) {
-            console.error('❌ Upload error:', error);
+            logger.error('Upload error', error, { context: 'Upload' });
             setUploadState('error');
             setUploadError(error instanceof Error ? error.message : 'Failed to upload document');
             showErrorToast(error, 'Failed to upload document');

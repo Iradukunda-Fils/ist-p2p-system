@@ -19,6 +19,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             "id": self.user.id,
             "username": self.user.username,
             "email": self.user.email,
+            "is_active": self.user.is_active,
+            "is_admin": self.user.is_admin_user,
+            "role": self.user.role,
+            "role_display": self.user.get_role_display()
         }
 
         # Include role if you have it

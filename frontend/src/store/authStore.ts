@@ -3,6 +3,7 @@ import { authApi } from '@/api/authApi';
 import { User } from '@/types';
 import { secureCookieManager } from '@/utils/cookies';
 import { broadcastAuthEvent, subscribeToAuthEvents, AuthSyncMessage } from '@/utils/authSync';
+import { logger } from '@/utils/logger';
 
 interface AuthState {
     user: User | null;
@@ -99,8 +100,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                         setTimeout(() => reject(new Error('Server logout timeout')), 2000)
                     )
                 ]).then(
-                    () => console.log('[Auth] Server logout successful'),
-                    (error) => console.warn('[Auth] Server logout skipped/timed out:', error)
+                    () => logger.info('Server logout successful', { context: 'Auth' }),
+                    (error) => logger.warn('Server logout skipped/timed out', { context: 'Auth', data: error })
                 );
                 // Don't await - continue with client cleanup immediately
             }
@@ -133,10 +134,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 timestamp: Date.now(),
             });
 
-            console.log('[Auth] Logout completed successfully');
+            logger.info('Logout completed successfully', { context: 'Auth' });
             return { success: true, username };
         } catch (error) {
-            console.error('[Auth] Error during logout process:', error);
+            logger.error('Error during logout process', error, { context: 'Auth' });
             
             // Even if there's an error, we should still clear local state
             get().stopSessionMonitoring();
@@ -170,7 +171,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             const securityCheck = secureCookieManager.performSecurityCheck();
 
             if (!securityCheck.isSecure) {
-                console.warn('[Auth] Security issues detected:', securityCheck.issues);
+                logger.warn('Security issues detected', { context: 'Auth', data: securityCheck.issues });
 
                 // If session timed out or tokens are invalid, logout
                 if (securityCheck.issues.some(issue =>
@@ -178,7 +179,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                     issue.includes('invalid or expired')
                 )) {
                     get().logout().catch(error => {
-                        console.error('[Auth] Error during security check logout:', error);
+                        logger.error('Error during security check logout', error, { context: 'Auth' });
                     });
                     return;
                 }
@@ -229,7 +230,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 });
             }
         } catch (error) {
-            console.error('[Auth] Error during auth check:', error);
+            logger.error('Error during auth check', error, { context: 'Auth' });
             set({
                 user: null,
                 isAuthenticated: false,
@@ -288,12 +289,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
      * Handle session timeout
      */
     handleSessionTimeout: () => {
-        console.log('[Auth] Session timed out due to inactivity');
+        logger.info('Session timed out due to inactivity', { context: 'Auth' });
 
         // Check if session is actually inactive
         if (!secureCookieManager.isSessionActive()) {
             get().logout().catch(error => {
-                console.error('[Auth] Error during session timeout logout:', error);
+                logger.error('Error during session timeout logout', error, { context: 'Auth' });
             });
 
             // Redirect to login with timeout message
@@ -319,11 +320,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
             const refreshToken = secureCookieManager.getRefreshToken();
             if (!refreshToken) {
-                console.warn('[Auth] No refresh token available');
+                logger.warn('No refresh token available', { context: 'Auth' });
                 return false;
             }
 
-            console.log('[Auth] Refreshing access token...');
+            logger.info('Refreshing access token...', { context: 'Auth' });
 
             // Call refresh API
             const response = await authApi.refreshToken(refreshToken);
@@ -340,10 +341,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 timestamp: Date.now(),
             });
 
-            console.log('[Auth] Token refreshed successfully');
+            logger.info('Token refreshed successfully', { context: 'Auth' });
             return true;
         } catch (error) {
-            console.error('[Auth] Token refresh failed:', error);
+            logger.error('Token refresh failed', error, { context: 'Auth' });
             return false;
         }
     },
@@ -354,7 +355,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
      */
     initializeAuthSync: () => {
         const unsubscribe = subscribeToAuthEvents((message: AuthSyncMessage) => {
-            console.log('[Auth Sync] Received event from another tab:', message.type);
+            logger.debug(`Received event from another tab: ${message.type}`, { context: 'Auth Sync' });
 
             switch (message.type) {
                 case 'LOGIN':
@@ -407,7 +408,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Get time until token expires
         const timeUntilExpiry = secureCookieManager.getTimeUntilExpiry();
         if (!timeUntilExpiry) {
-            console.warn('[Auth] Cannot start token expiry timer - no expiry time available');
+            logger.warn('Cannot start token expiry timer - no expiry time available', { context: 'Auth' });
             return;
         }
 
@@ -421,7 +422,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const refreshBuffer = Math.min(5 * 60 * 1000, timeUntilExpiry / 2); // 5 minutes or half the lifetime
         const refreshTime = Math.max(timeUntilExpiry - refreshBuffer, 60 * 1000); // At least 1 minute
 
-        console.log(`[Auth] Token expires in ${Math.round(timeUntilExpiry / 1000)}s, will refresh in ${Math.round(refreshTime / 1000)}s`);
+        logger.info(`Token expires in ${Math.round(timeUntilExpiry / 1000)}s, will refresh in ${Math.round(refreshTime / 1000)}s`, { context: 'Auth' });
 
         const timerId = setTimeout(() => {
             get().handleTokenExpiry();
@@ -448,7 +449,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
      * Handle token expiry by attempting to refresh
      */
     handleTokenExpiry: async () => {
-        console.log('[Auth] Access token is about to expire, attempting refresh...');
+        logger.info('Access token is about to expire, attempting refresh...', { context: 'Auth' });
 
         try {
             const refreshed = await get().refreshTokenIfNeeded();
@@ -456,11 +457,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 // Restart the timer with new token
                 get().startTokenExpiryTimer();
             } else {
-                console.warn('[Auth] Token refresh failed, user will need to re-authenticate');
+                logger.warn('Token refresh failed, user will need to re-authenticate', { context: 'Auth' });
                 // Don't logout immediately, let the API client handle 401 responses
             }
         } catch (error) {
-            console.error('[Auth] Error during token expiry handling:', error);
+            logger.error('Error during token expiry handling', error, { context: 'Auth' });
         }
     },
 

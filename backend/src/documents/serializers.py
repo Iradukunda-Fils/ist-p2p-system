@@ -191,53 +191,55 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
             if not validated_data.get('file_size') and hasattr(file_obj, 'size'):
                 validated_data['file_size'] = file_obj.size
         
+        # CHECK FOR DUPLICATE BEFORE ATTEMPTING SAVE
+        if file_hash:
+            try:
+                existing_doc = Document.objects.get(file_hash=file_hash)
+                
+                # Check if physical file exists
+                if existing_doc.file and default_storage.exists(existing_doc.file.name):
+                    # File already exists - return info about existing document
+                    logger.info(
+                        f"Duplicate file detected. Hash: {file_hash}, "
+                        f"Existing document: {existing_doc.id} - {existing_doc.title}"
+                    )
+                    
+                    # Use a custom exception to signal this is a duplicate (not an error)
+                    from rest_framework.exceptions import ValidationError
+                    error = ValidationError({
+                        'duplicate': True,
+                        'message': f'This file already exists in the system.',
+                        'existing_document': {
+                            'id': str(existing_doc.id),
+                            'title': existing_doc.title or existing_doc.original_filename,
+                            'doc_type': existing_doc.doc_type,
+                            'uploaded_by': existing_doc.uploaded_by.username if existing_doc.uploaded_by else None,
+                            'uploaded_at': existing_doc.created_at.isoformat(),
+                            'file_url': existing_doc.file.url if existing_doc.file else None,
+                        }
+                    })
+                    # Add custom status code hint
+                    error.status_code = 409  # Conflict
+                    raise error
+                else:
+                    # Stale record - clean up
+                    logger.warning(
+                        f"Found stale document record (ID: {existing_doc.id}) with missing file. "
+                        f"Hash: {file_hash}. Deleting stale record."
+                    )
+                    existing_doc.delete()
+                    logger.info(f"Stale record removed, proceeding with upload")
+                    
+            except Document.DoesNotExist:
+                # No duplicate - proceed normally
+                pass
+        
+        # Proceed with creation
         try:
             return super().create(validated_data)
         except DjangoValidationError as e:
-            # Handle duplicate file hash error with resilience
-            if 'file_hash' in e.message_dict:
-                logger.info(f"Duplicate file hash detected: {file_hash}")
-                
-                # Try to find the existing document with this hash
-                try:
-                    existing_doc = Document.objects.get(file_hash=file_hash)
-                    
-                    # Check if the physical file actually exists
-                    if existing_doc.file and default_storage.exists(existing_doc.file.name):
-                        # File exists in storage - this is a genuine duplicate
-                        logger.warning(
-                            f"Duplicate file upload attempt. Hash: {file_hash}, "
-                            f"Existing document ID: {existing_doc.id}, "
-                            f"File: {existing_doc.file.name}"
-                        )
-                        raise serializers.ValidationError({
-                            'file': (
-                                f'This file has already been uploaded as "{existing_doc.title or existing_doc.original_filename}". '
-                                f'The existing document is available in the system. '
-                                f'Please use the existing document or upload a different file.'
-                            )
-                        })
-                    else:
-                        # File record exists but physical file is missing - delete stale record
-                        logger.warning(
-                            f"Found stale document record (ID: {existing_doc.id}) with missing file. "
-                            f"Hash: {file_hash}. Deleting stale record to allow re-upload."
-                        )
-                        existing_doc.delete()
-                        
-                        # Retry the creation now that stale record is removed
-                        logger.info(f"Re-attempting upload after removing stale record")
-                        return super().create(validated_data)
-                        
-                except Document.DoesNotExist:
-                    # This shouldn't happen but handle it gracefully
-                    logger.error(f"Duplicate hash error but no document found with hash: {file_hash}")
-                    # Try to proceed anyway - maybe concurrent request
-                    raise serializers.ValidationError({
-                        'file': 'A duplicate file was detected. Please try again or contact support if the problem persists.'
-                    })
-            
-            # Convert other Django validation errors to DRF format
+            # This should rarely happen now since we check above
+            logger.error(f"Unexpected validation error: {e.message_dict}")
             raise serializers.ValidationError(e.message_dict)
 
 

@@ -3,6 +3,8 @@
  * Ensures auth state is synchronized across all browser tabs
  */
 
+import { logger } from './logger';
+
 // BroadcastChannel for modern browsers
 const CHANNEL_NAME = 'auth_sync_channel';
 let broadcastChannel: BroadcastChannel | null = null;
@@ -59,7 +61,7 @@ export const subscribeToAuthEvents = (callback: (message: AuthSyncMessage) => vo
                 const message: AuthSyncMessage = JSON.parse(event.newValue);
                 callback(message);
             } catch (error) {
-                console.error('[Auth Sync] Failed to parse storage event:', error);
+                logger.error('Failed to parse storage event', error, { context: 'Auth Sync' });
             }
         }
     };

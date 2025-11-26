@@ -4,6 +4,7 @@
  */
 
 import { User } from '../types';
+import { logger } from './logger';
 
 // Cookie configuration constants
 const COOKIES = {
@@ -116,7 +117,7 @@ export class SecureCookieManager {
                 try {
                     return decodeURIComponent(value);
                 } catch (error) {
-                    console.error(`[Cookie] Failed to decode cookie ${name}:`, error);
+                    logger.error(`Failed to decode cookie ${name}`, error, { context: 'Cookie' });
                     return null;
                 }
             }
@@ -192,7 +193,7 @@ export class SecureCookieManager {
             const decoded = atob(paddedPayload);
             return JSON.parse(decoded);
         } catch (error) {
-            console.error('[Cookie] Failed to parse JWT payload:', error);
+            logger.error('Failed to parse JWT payload', error, { context: 'Cookie' });
             return null;
         }
     }
@@ -274,11 +275,11 @@ export class SecureCookieManager {
         const refreshValidation = this.validateToken(refreshToken);
 
         if (!accessValidation.isValid) {
-            console.warn('[Cookie] Access token validation failed:', accessValidation.error);
+            logger.warn('Access token validation failed', { context: 'Cookie', data: accessValidation.error });
         }
 
         if (!refreshValidation.isValid) {
-            console.warn('[Cookie] Refresh token validation failed:', refreshValidation.error);
+            logger.warn('Refresh token validation failed', { context: 'Cookie', data: refreshValidation.error });
         }
 
         // Store access token with short expiry
@@ -313,7 +314,7 @@ export class SecureCookieManager {
 
         const validation = this.validateToken(token);
         if (!validation.isValid) {
-            console.warn('[Cookie] Access token is invalid:', validation.error);
+            logger.warn('Access token is invalid', { context: 'Cookie', data: validation.error });
             // Clean up invalid token
             this.deleteCookie(COOKIES.ACCESS_TOKEN);
             return null;
@@ -333,7 +334,7 @@ export class SecureCookieManager {
 
         const validation = this.validateToken(token);
         if (!validation.isValid) {
-            console.warn('[Cookie] Refresh token is invalid:', validation.error);
+            logger.warn('Refresh token is invalid', { context: 'Cookie', data: validation.error });
             // Clean up invalid token
             this.deleteCookie(COOKIES.REFRESH_TOKEN);
             return null;
@@ -352,7 +353,7 @@ export class SecureCookieManager {
                 expires: this.createExpiryDateFromDays(COOKIE_CONFIG.USER_DATA_EXPIRY_DAYS),
             });
         } catch (error) {
-            console.error('[Cookie] Failed to serialize user data:', error);
+            logger.error('Failed to serialize user data', error, { context: 'Cookie' });
         }
     }
 
@@ -368,7 +369,7 @@ export class SecureCookieManager {
         try {
             return JSON.parse(data) as T;
         } catch (error) {
-            console.error('[Cookie] Failed to parse user data:', error);
+            logger.error('Failed to parse user data', error, { context: 'Cookie' });
             // Clean up corrupted data
             this.deleteCookie(COOKIES.USER_DATA);
             return null;

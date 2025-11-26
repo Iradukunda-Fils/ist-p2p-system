@@ -107,10 +107,26 @@ class DocumentViewSet(viewsets.ModelViewSet):
         try:
             serializer.is_valid(raise_exception=True)
         except Exception as e:
-            # Log validation errors for debugging
-            logger.error(f"Document upload validation failed: {str(e)}")
-            if hasattr(serializer, 'errors'):
-                logger.error(f"Validation errors: {serializer.errors}")
+            # Check if this is a duplicate file (409 Conflict)
+            if hasattr(e, 'detail') and isinstance(e.detail, dict):
+                if e.detail.get('duplicate'):
+                    # This is a duplicate file - return 409 with existing document info
+                    # Use INFO level since this is expected business logic, not an error
+                    logger.info(
+                        f"Duplicate file detected for user {request.user.username}. "
+                        f"Returning existing document: {e.detail.get('existing_document', {}).get('id')}"
+                    )
+                    return Response(
+                        {
+                            'duplicate': True,
+                            'message': e.detail.get('message'),
+                            'existing_document': e.detail.get('existing_document'),
+                        },
+                        status=status.HTTP_409_CONFLICT
+                    )
+            
+            # Log actual validation errors (invalid data, missing fields, etc.)
+            logger.warning(f"Document upload validation failed for user {request.user.username}: {str(e)}")
             raise
         
         try:
@@ -128,7 +144,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 headers=headers
             )
         except Exception as e:
-            logger.exception(f"Document upload failed during save: {str(e)}")
+            logger.error(f"Document upload failed during save for user {request.user.username}: {str(e)}")
             return Response(
                 {
                     'error': {
