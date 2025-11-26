@@ -77,10 +77,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create application user (non-root for security)
 RUN groupadd -r django && useradd -r -g django django
 
-# Create application directories
-RUN mkdir -p /app/src /app/static /app/media /app/logs && \
-    chown -R django:django /app
-
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
@@ -90,6 +86,10 @@ WORKDIR /app
 # Copy application code
 COPY --chown=django:django ./src /app/src
 COPY --chown=django:django ./docker-entrypoint.sh /app/docker-entrypoint.sh
+
+# Create Django-specific directories (must be before USER switch)
+RUN mkdir -p /app/src/static /app/src/temp_uploads /app/src/staticfiles /app/media /app/logs && \
+    chown -R django:django /app/src /app/media /app/logs
 
 # Make entrypoint executable
 RUN chmod +x /app/docker-entrypoint.sh

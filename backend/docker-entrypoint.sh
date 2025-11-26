@@ -44,16 +44,22 @@ echo -e "${GREEN}✓ JWT keys ready${NC}"
 # ============================================================================
 echo -e "${YELLOW}[2/7] Waiting for database...${NC}"
 
+# Build DATABASE_URL from components if not provided
+if [ -z "$DATABASE_URL" ]; then
+    export DATABASE_URL="postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:-db}:${DATABASE_PORT:-5432}/${DATABASE_NAME}"
+    echo "DATABASE_URL constructed from components"
+fi
+
 MAX_RETRIES=30
 RETRY_COUNT=0
 
-until python -c "import psycopg2, os; conn = psycopg2.connect(os.environ['DATABASE_URL']); conn.close()"  > /dev/null 2>&1; do
+until python -c "import psycopg2, os; conn = psycopg2.connect(os.environ.get('DATABASE_URL', '')); conn.close()"  > /dev/null 2>&1; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     
     if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
         echo -e "${RED}ERROR: Database connection timeout after ${MAX_RETRIES} attempts${NC}"
         # Try to run without silencing output to show the actual error
-        python -c "import psycopg2, os; conn = psycopg2.connect(os.environ['DATABASE_URL']); print('Connection successful'); conn.close()"
+        python -c "import psycopg2, os; conn = psycopg2.connect(os.environ.get('DATABASE_URL', '')); print('Connection successful'); conn.close()"
         exit 1
     fi
     
@@ -70,7 +76,9 @@ echo -e "${YELLOW}[3/7] Running database migrations...${NC}"
 
 cd /app/src
 
-if python manage.py migrate --noinput; then
+if [ "${SKIP_MIGRATIONS:-false}" = "true" ]; then
+    echo "Skipping migrations (SKIP_MIGRATIONS=true)"
+elif python manage.py migrate --noinput; then
     echo -e "${GREEN}✓ Migrations completed successfully${NC}"
 else
     echo -e "${RED}ERROR: Migration failed${NC}"
@@ -84,8 +92,8 @@ echo -e "${YELLOW}[3/6] Collecting static files...${NC}"
 
 if [ "${SKIP_COLLECTSTATIC:-false}" != "true" ]; then
     # Ensure static directory exists and is writable
-    mkdir -p /app/src/staticfiles
-    chmod -R 755 /app/src/staticfiles 2>/dev/null || true
+    mkdir -p "${STATIC_ROOT}"
+    chmod -R 755 "${STATIC_ROOT}" 2>/dev/null || true
     
     if python manage.py collectstatic --noinput --clear 2> /tmp/collectstatic_error.log; then
         echo -e "${GREEN}✓ Static files collected${NC}"
@@ -111,13 +119,15 @@ User = get_user_model()
 username = '$DJANGO_SUPERUSER_USERNAME'
 email = '$DJANGO_SUPERUSER_EMAIL'
 password = '$DJANGO_SUPERUSER_PASSWORD'
+role = '$DJANGO_SUPERUSER_ROLE'
 
 if not User.objects.filter(username=username).exists():
     try:
         User.objects.create_superuser(
             username=username,
             email=email,
-            password=password
+            password=password,
+            role=role
         )
         print('✓ Superuser created successfully')
     except Exception as e:
