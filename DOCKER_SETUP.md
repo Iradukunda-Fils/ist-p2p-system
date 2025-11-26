@@ -1,4 +1,4 @@
-# Docker Setup and Optimization Guide
+[text](frontend/.dockerignore)# Docker Setup and Optimization Guide
 
 ## Overview
 

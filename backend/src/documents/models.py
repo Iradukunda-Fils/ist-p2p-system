@@ -201,6 +201,24 @@ class Document(models.Model):
             # Use Django's transaction.on_commit to ensure the document is saved before queuing
             from django.db import transaction
             transaction.on_commit(lambda: self._trigger_processing_async())
+
+    def delete(self, *args, **kwargs):
+        """
+        Override delete to remove file from storage.
+        """
+        # Delete the file from storage if it exists
+        if self.file:
+            try:
+                # Use the storage backend to delete the file
+                # This ensures it works with both local and S3 storage
+                self.file.storage.delete(self.file.name)
+            except Exception as e:
+                # Log error but continue with model deletion
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to delete file for document {self.id}: {e}")
+        
+        super().delete(*args, **kwargs)
     
     def __str__(self):
         """

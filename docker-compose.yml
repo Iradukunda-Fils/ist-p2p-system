@@ -111,6 +111,7 @@ services:
       
       # Static Files Path (override to match volume mount)
       STATIC_ROOT: /app/static
+      MEDIA_ROOT: /app/media
       
     depends_on:
       db:
@@ -165,6 +166,7 @@ services:
       
       # Skip static files collection for workers
       SKIP_COLLECTSTATIC: "true"
+      MEDIA_ROOT: /app/media
       
     depends_on:
       db:
