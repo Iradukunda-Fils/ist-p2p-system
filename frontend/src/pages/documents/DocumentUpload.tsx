@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { documentsApi, DocumentUploadData, DocumentUploadResponse } from '@/api/documentsApi';
 import { DocumentType } from '@/types';
@@ -15,6 +16,7 @@ type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
 export const DocumentUpload: React.FC = () => {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [uploadState, setUploadState] = useState<UploadState>('idle');
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadError, setUploadError] = useState<string | undefined>(undefined);
@@ -82,6 +84,9 @@ export const DocumentUpload: React.FC = () => {
             // Set success state and show success message
             setUploadState('success');
             showSuccessToast(response.message || 'Document uploaded successfully');
+            
+            // Invalidate documents query to trigger refresh
+            queryClient.invalidateQueries({ queryKey: ['documents'] });
             
             // Check if we have a document ID before navigating
             if (response.document?.id) {

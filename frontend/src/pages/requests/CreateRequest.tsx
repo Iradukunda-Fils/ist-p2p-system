@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { purchasesApi } from '@/api/purchasesApi';
 import { documentsApi } from '@/api/documentsApi';
@@ -55,11 +55,15 @@ const CreateRequest: React.FC = () => {
         setCalculatedTotal(total);
     }, [watchItems]);
 
+    const queryClient = useQueryClient();
+
     // Mutation to create request
     const createMutation = useMutation({
         mutationFn: (data: CreateRequestData) => purchasesApi.createRequest(data),
         onSuccess: (response) => {
             handleSuccess('Request created successfully!');
+            // Invalidate requests query to trigger refresh
+            queryClient.invalidateQueries({ queryKey: ['requests'] });
             navigate(`/requests/${response.request.id}`);
         },
         onError: (error: any) => {
