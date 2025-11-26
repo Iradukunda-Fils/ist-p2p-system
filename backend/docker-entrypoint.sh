@@ -14,6 +14,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+
 echo "========================================"
 echo " P2P Procurement Backend Starting"
 echo " Environment: ${ENVIRONMENT:-development}"
@@ -82,7 +83,11 @@ fi
 echo -e "${YELLOW}[3/6] Collecting static files...${NC}"
 
 if [ "${SKIP_COLLECTSTATIC:-false}" != "true" ]; then
-    if python manage.py collectstatic --noinput --clear; then
+    # Ensure static directory exists and is writable
+    mkdir -p /app/src/staticfiles
+    chmod -R 755 /app/src/staticfiles 2>/dev/null || true
+    
+    if python manage.py collectstatic --noinput --clear 2> /tmp/collectstatic_error.log; then
         echo -e "${GREEN}✓ Static files collected${NC}"
     else
         echo -e "${YELLOW}⚠ Static file collection failed (non-critical)${NC}"

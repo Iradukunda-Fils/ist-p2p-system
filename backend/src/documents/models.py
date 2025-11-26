@@ -244,6 +244,15 @@ class Document(models.Model):
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to queue document processing for {self.id}: {e}")
     
+    def _trigger_processing_async(self):
+        """
+        Trigger asynchronous document processing (called via transaction.on_commit).
+        
+        This method is called from the save() method after the transaction commits
+        to ensure the document is fully saved before queuing Celery tasks.
+        """
+        self._trigger_processing()
+    
     @property
     def is_processed(self):
         """Check if document processing is completed."""

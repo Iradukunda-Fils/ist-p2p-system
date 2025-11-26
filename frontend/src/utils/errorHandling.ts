@@ -1,4 +1,26 @@
 /**
+ * Extract a readable error message from backend responses.
+ * Handles nested error objects, plain messages, or string responses.
+ */
+export const extractBackendMessage = (error: any): string | undefined => {
+    if (error?.response?.data) {
+        const data = error.response.data;
+        // Nested error object with message
+        if (data?.error?.message) {
+            return data.error.message;
+        }
+        // Direct message field
+        if (data?.message) {
+            return data.message;
+        }
+        // If the response itself is a string
+        if (typeof data === 'string') {
+            return data;
+        }
+    }
+    return undefined;
+};
+/*
  * Centralized error handling utilities
  * Provides consistent error handling patterns across the application
  */
@@ -23,6 +45,13 @@ export interface APIErrorResponse {
  */
 export const handleApiError = (error: any, context?: string): void => {
     console.error(`[API Error${context ? ` - ${context}` : ''}]:`, error);
+
+    // Attempt to extract a user-friendly message from various backend error formats
+    const extractedMessage = extractBackendMessage(error);
+    if (extractedMessage) {
+        toast.error(extractedMessage);
+        return;
+    }
 
     if (error.response?.data) {
         const data = error.response.data;

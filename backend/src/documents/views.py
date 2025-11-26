@@ -96,12 +96,28 @@ class DocumentViewSet(viewsets.ModelViewSet):
         """
         Handle document upload with validation and processing trigger.
         """
+        import logging
+        logger = logging.getLogger('documents.upload')
+        
+        logger.info(f"Document upload attempt by user: {request.user.username}")
+        logger.debug(f"Request data keys: {list(request.data.keys())}")
+        
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            # Log validation errors for debugging
+            logger.error(f"Document upload validation failed: {str(e)}")
+            if hasattr(serializer, 'errors'):
+                logger.error(f"Validation errors: {serializer.errors}")
+            raise
         
         try:
             self.perform_create(serializer)
             headers = self.get_success_headers(serializer.data)
+            
+            logger.info(f"Document uploaded successfully: {serializer.data.get('id')}")
             
             return Response(
                 {
@@ -112,6 +128,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 headers=headers
             )
         except Exception as e:
+            logger.exception(f"Document upload failed during save: {str(e)}")
             return Response(
                 {
                     'error': {
@@ -406,4 +423,4 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return True
         
         # Users can modify their own documents
-        return document.uploaded_by 
+        return document.uploaded_by == user

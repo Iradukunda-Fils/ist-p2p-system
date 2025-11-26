@@ -18,7 +18,8 @@ User Management Endpoints (Admin only):
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CustomTokenObtainPairView, CustomTokenRefreshView, logout_view, UserManagementViewSet
+from rest_framework_simplejwt.views import TokenBlacklistView
+from .views import CustomTokenObtainPairView, CustomTokenRefreshView, UserManagementViewSet
 
 app_name = 'users'
 
@@ -30,7 +31,7 @@ urlpatterns = [
     # JWT Authentication Endpoints
     path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
-    path('logout/', logout_view, name='logout'),
+    path('logout/', TokenBlacklistView.as_view(), name='logout'),
     
     # User Management Endpoints (admin only)
     path('', include(router.urls)),

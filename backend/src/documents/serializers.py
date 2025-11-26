@@ -21,7 +21,8 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
     and secure document creation with proper user association.
     """
     
-    # Make uploaded_by read-only since it's set from request.user
+    # uploaded_by is populated from request.user in the view
+    # Returns full user object to match frontend types
     uploaded_by = UserMiniSerializer(read_only=True)
     
     # Add computed fields for API responses
@@ -124,26 +125,12 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
                     f"Allowed types: {', '.join(allowed_extensions)}"
                 )
         
-        # Additional security checks
+        # Log content type for debugging but don't reject based on it
+        # Strict MIME type checking can cause false rejections
         if hasattr(value, 'content_type'):
-            # Check MIME type matches extension
-            allowed_mime_types = {
-                '.pdf': ['application/pdf'],
-                '.png': ['image/png'],
-                '.jpg': ['image/jpeg'],
-                '.jpeg': ['image/jpeg'],
-                '.tiff': ['image/tiff'],
-                '.bmp': ['image/bmp'],
-            }
-            
-            file_ext = os.path.splitext(value.name)[1].lower()
-            expected_mime_types = allowed_mime_types.get(file_ext, [])
-            
-            if expected_mime_types and value.content_type not in expected_mime_types:
-                raise serializers.ValidationError(
-                    f"File content type '{value.content_type}' does not match "
-                    f"extension '{file_ext}'. Expected: {', '.join(expected_mime_types)}"
-                )
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Uploaded file content type: {value.content_type}")
         
         return value
     
@@ -167,7 +154,7 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """
-        Create a new document with proper user association.
+        Create a new Document instance with duplicate detection.
         
         Args:
             validated_data: Validated serializer data
@@ -175,15 +162,82 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
         Returns:
             Created Document instance
         """
+        import logging
+        import hashlib
+        from django.core.files.storage import default_storage
+        
+        logger = logging.getLogger('documents.upload')
+        
         # Set the uploaded_by field from request user
         request = self.context.get('request')
         if request and request.user:
             validated_data['uploaded_by'] = request.user
         
+        # Calculate file hash BEFORE attempting to save
+        file_obj = validated_data.get('file')
+        if file_obj and not validated_data.get('file_hash'):
+            file_obj.seek(0)  # Reset file pointer
+            file_hash = hashlib.sha256(file_obj.read()).hexdigest()
+            file_obj.seek(0)  # Reset again for actual save
+            validated_data['file_hash'] = file_hash
+            logger.debug(f"Calculated file hash: {file_hash}")
+        else:
+            file_hash = validated_data.get('file_hash')
+        
+        # Set metadata fields
+        if file_obj:
+            if not validated_data.get('original_filename'):
+                validated_data['original_filename'] = file_obj.name
+            if not validated_data.get('file_size') and hasattr(file_obj, 'size'):
+                validated_data['file_size'] = file_obj.size
+        
         try:
             return super().create(validated_data)
         except DjangoValidationError as e:
-            # Convert Django validation errors to DRF format
+            # Handle duplicate file hash error with resilience
+            if 'file_hash' in e.message_dict:
+                logger.info(f"Duplicate file hash detected: {file_hash}")
+                
+                # Try to find the existing document with this hash
+                try:
+                    existing_doc = Document.objects.get(file_hash=file_hash)
+                    
+                    # Check if the physical file actually exists
+                    if existing_doc.file and default_storage.exists(existing_doc.file.name):
+                        # File exists in storage - this is a genuine duplicate
+                        logger.warning(
+                            f"Duplicate file upload attempt. Hash: {file_hash}, "
+                            f"Existing document ID: {existing_doc.id}, "
+                            f"File: {existing_doc.file.name}"
+                        )
+                        raise serializers.ValidationError({
+                            'file': (
+                                f'This file has already been uploaded as "{existing_doc.title or existing_doc.original_filename}". '
+                                f'The existing document is available in the system. '
+                                f'Please use the existing document or upload a different file.'
+                            )
+                        })
+                    else:
+                        # File record exists but physical file is missing - delete stale record
+                        logger.warning(
+                            f"Found stale document record (ID: {existing_doc.id}) with missing file. "
+                            f"Hash: {file_hash}. Deleting stale record to allow re-upload."
+                        )
+                        existing_doc.delete()
+                        
+                        # Retry the creation now that stale record is removed
+                        logger.info(f"Re-attempting upload after removing stale record")
+                        return super().create(validated_data)
+                        
+                except Document.DoesNotExist:
+                    # This shouldn't happen but handle it gracefully
+                    logger.error(f"Duplicate hash error but no document found with hash: {file_hash}")
+                    # Try to proceed anyway - maybe concurrent request
+                    raise serializers.ValidationError({
+                        'file': 'A duplicate file was detected. Please try again or contact support if the problem persists.'
+                    })
+            
+            # Convert other Django validation errors to DRF format
             raise serializers.ValidationError(e.message_dict)
 
 

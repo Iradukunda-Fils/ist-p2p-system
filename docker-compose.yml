@@ -17,7 +17,6 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - p2p_network
       - db_network
     restart: unless-stopped
     command: 
@@ -37,8 +36,6 @@ services:
     profiles:
       - dev-ports
 
-  # pgAdmin - PostgreSQL Management Interface
-
   # Redis Cache & Message Broker
   redis:
     image: redis:7-alpine
@@ -53,7 +50,7 @@ services:
       retries: 5
       start_period: 5s
     networks:
-      - app_network
+      - db_network
     restart: unless-stopped
 
   # Redis Cache & Message Broker with Development Ports
@@ -91,45 +88,28 @@ services:
       - static_files:/app/static
       - media_files:/app/media
       - backend_logs:/app/logs
-    env_file:
-      - .env
+      
     environment:
       # Core Django
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.development}
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: ${DEBUG:-True}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       
-      # Database URL (PostgreSQL) - Single URL instead of multiple variables
-      DATABASE_URL: ${DATABASE_URL}
+      # Database
+      DATABASE_URL: postgres://${DATABASE_USER:-postgres}:${DATABASE_PASSWORD:-postgres}@db:5432/${DATABASE_NAME:-p2p_procurement}
       
-      # Redis URLs - Simplified to just URLs
-      REDIS_URL: ${REDIS_URL}
-      CACHE_URL: ${CACHE_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      # Redis & Cache
+      CACHE_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/1
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/2
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/3
       
-      # CORS
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      # Superuser Auto-Creation
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME}
+      DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD}
       
-      # File Storage
-      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-52428800}
-      
-      # Superuser Creation
-      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-}
-      DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL:-}
-      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-}
-      
-      # Logging
-      DJANGO_LOG_LEVEL: ${DJANGO_LOG_LEVEL:-DEBUG}
-      
-      # Security (Development)
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-False}
-      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-False}
-      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
-      
-      # Static Files
+      # Static Files Path (override to match volume mount)
       STATIC_ROOT: /app/static
       
     depends_on:
@@ -175,17 +155,17 @@ services:
       DEBUG: ${DEBUG:-True}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       
-      # Database URL (PostgreSQL)
-      DATABASE_URL: ${DATABASE_URL}
+      # Database
+      DATABASE_URL: postgres://${DATABASE_USER:-postgres}:${DATABASE_PASSWORD:-postgres}@db:5432/${DATABASE_NAME:-p2p_procurement}
       
-      # Redis URLs
-      REDIS_URL: ${REDIS_URL}
-      CACHE_URL: ${CACHE_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      # Redis & Cache
+      CACHE_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/1
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/2
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/3
       
-      # Skip static collection in worker
+      # Skip static files collection for workers
       SKIP_COLLECTSTATIC: "true"
+      
     depends_on:
       db:
         condition: service_healthy
@@ -194,7 +174,6 @@ services:
       backend:
         condition: service_started
     networks:
-      - app_network
       - db_network
     restart: unless-stopped
 
@@ -216,24 +195,20 @@ services:
       DEBUG: ${DEBUG:-True}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       
-      # Database URL (PostgreSQL)
-      DATABASE_URL: ${DATABASE_URL}
+      # Database
+      DATABASE_URL: postgres://${DATABASE_USER:-postgres}:${DATABASE_PASSWORD:-postgres}@db:5432/${DATABASE_NAME:-p2p_procurement}
       
-      # Redis URLs
-      REDIS_URL: ${REDIS_URL}
-      CACHE_URL: ${CACHE_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      # Redis & Cache
+      CACHE_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/1
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/2
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/3
       
-      # Skip static collection in beat
-      SKIP_COLLECTSTATIC: "true"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - app_network
       - db_network
     restart: unless-stopped
 
@@ -267,7 +242,11 @@ services:
     ports:
       - "${NGINX_PORT:-80}:80"
       - "${NGINX_SSL_PORT:-443}:443"
-    # Remove depends_on to avoid circular dependency issues
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_started
     networks:
       - app_network  # Only need app_network to communicate with backend and frontend
     restart: unless-stopped

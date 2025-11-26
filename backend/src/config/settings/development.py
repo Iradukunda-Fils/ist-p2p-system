@@ -9,9 +9,6 @@ import sys
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-INSTALLED_APPS.append("corsheaders")
-MIDDLEWARE.insert(1, "corsheaders.middleware.CorsMiddleware")
-
 # CORS Configuration - Use environment variables for Docker compatibility
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost,http://localhost:3000,http://127.0.0.1,http://127.0.0.1:3000').split(',')
 
@@ -63,7 +60,6 @@ LOGGING['loggers']['django']['level'] = 'DEBUG'
 LOGGING['loggers']['p2p']['level'] = 'DEBUG'
 
 # Disable migrations during testing
-import sys
 if 'test' in sys.argv or 'pytest' in sys.modules:
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',

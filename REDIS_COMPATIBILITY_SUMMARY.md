@@ -56,10 +56,9 @@ CELERY_RESULT_BACKEND=redis://redis:6379/1
 DATABASE_URL=postgresql://postgres:postgres@db:5432/p2p_procurement
 
 REDIS_PASSWORD=redis_dev_password
-REDIS_URL=redis://:redis_dev_password@redis:6379/0
-CACHE_URL=redis://:redis_dev_password@redis:6379/1
-CELERY_BROKER_URL=redis://:redis_dev_password@redis:6379/2
-CELERY_RESULT_BACKEND=redis://:redis_dev_password@redis:6379/3
+CACHE_URL=redis://:redis_dev_password@redis:6379/0
+CELERY_BROKER_URL=redis://:redis_dev_password@redis:6379/1
+CELERY_RESULT_BACKEND=redis://:redis_dev_password@redis:6379/2
 ```
 
 ### Benefits of URL-based Configuration

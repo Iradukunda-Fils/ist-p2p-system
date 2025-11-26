@@ -16,10 +16,9 @@ This document summarizes the comprehensive backend configuration optimization an
 # Simplified Configuration
 DATABASE_URL=postgresql://postgres:postgres@db:5432/p2p_procurement
 REDIS_PASSWORD=redis_dev_password
-REDIS_URL=redis://:redis_dev_password@redis:6379/0
-CACHE_URL=redis://:redis_dev_password@redis:6379/1
-CELERY_BROKER_URL=redis://:redis_dev_password@redis:6379/2
-CELERY_RESULT_BACKEND=redis://:redis_dev_password@redis:6379/3
+CACHE_URL=redis://:redis_dev_password@redis:6379/0
+CELERY_BROKER_URL=redis://:redis_dev_password@redis:6379/1
+CELERY_RESULT_BACKEND=redis://:redis_dev_password@redis:6379/2
 ```
 
 #### **Django Settings Updates**
@@ -42,10 +41,9 @@ CELERY_RESULT_BACKEND=redis://:redis_dev_password@redis:6379/3
 # Core URLs only
 DATABASE_URL=postgresql://postgres:postgres@db:5432/p2p_procurement
 REDIS_PASSWORD=redis_dev_password
-REDIS_URL=redis://:redis_dev_password@redis:6379/0
-CACHE_URL=redis://:redis_dev_password@redis:6379/1
-CELERY_BROKER_URL=redis://:redis_dev_password@redis:6379/2
-CELERY_RESULT_BACKEND=redis://:redis_dev_password@redis:6379/3
+CACHE_URL=redis://:redis_dev_password@redis:6379/0
+CELERY_BROKER_URL=redis://:redis_dev_password@redis:6379/1
+CELERY_RESULT_BACKEND=redis://:redis_dev_password@redis:6379/2
 ```
 
 #### **Production Environment** (`.env.production`)
@@ -53,7 +51,7 @@ CELERY_RESULT_BACKEND=redis://:redis_dev_password@redis:6379/3
 # Secure production URLs
 DATABASE_URL=postgresql://p2p_admin:SECURE_PASSWORD@db:5432/p2p_procurement_prod
 REDIS_PASSWORD=SECURE_REDIS_PASSWORD
-REDIS_URL=redis://:SECURE_REDIS_PASSWORD@redis:6379/0
+CACHE_URL=redis://:SECURE_REDIS_PASSWORD@redis:6379/0
 # ... other secure URLs
 ```
 

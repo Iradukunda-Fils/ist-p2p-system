@@ -24,6 +24,8 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',  # Required for token blacklisting on logout
+    'corsheaders',  # Required for CORS middleware
     'drf_spectacular',
     'storages',
     'django_filters',
@@ -100,7 +102,7 @@ STATICFILES_DIRS = [
 
 # Media files - Default configuration (overridden in environment-specific settings)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = config('MEDIA_ROOT', default=BASE_DIR / 'media')
 
 # File Storage Configuration
 USE_S3 = False  # Default to local storage, override in production
@@ -289,6 +291,16 @@ LOGGING = {
         'django': {
             'handlers': ['console', 'file'],
             'level': 'INFO',
+            'propagate': False,
+        },
+        'django.utils.autoreload': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Silence DEBUG file monitoring logs
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Hide SQL query DEBUG logs
             'propagate': False,
         },
         'p2p': {

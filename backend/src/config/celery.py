@@ -84,7 +84,7 @@ app.conf.update(
 @app.task(bind=True)
 def debug_task(self):
     """Debug task for testing Celery configuration."""
-    print(f'Request: {self.request!r}')
+    # print(f'Request: {self.request!r}')  # Uncomment for debugging
     return f'Debug task executed successfully'
 
 @app.task(bind=True, max_retries=3)

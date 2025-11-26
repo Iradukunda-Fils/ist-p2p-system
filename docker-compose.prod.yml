@@ -18,10 +18,10 @@ services:
       POSTGRES_DB: ${DATABASE_NAME:-p2p_procurement_prod}
       POSTGRES_USER: ${DATABASE_USER:-p2p_admin}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8"
+      PGDATA: /var/lib/postgresql/data
     # No exposed ports in production - internal access only
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -29,26 +29,18 @@ services:
     networks:
       - db_network
     restart: always
-    command: 
-      - "postgres"
-      - "-c"
-      - "max_connections=200"
-      - "-c"
-      - "shared_buffers=512MB"
-      - "-c"
-      - "effective_cache_size=2GB"
-      - "-c"
-      - "maintenance_work_mem=128MB"
-      - "-c"
-      - "checkpoint_completion_target=0.9"
-      - "-c"
-      - "wal_buffers=16MB"
-      - "-c"
-      - "default_statistics_target=100"
-      - "-c"
-      - "random_page_cost=1.1"
-      - "-c"
-      - "effective_io_concurrency=200"
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=512MB
+      -c effective_cache_size=2GB
+      -c maintenance_work_mem=128MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c timezone=UTC
     deploy:
       resources:
         limits:
@@ -83,7 +75,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - app_network
+      - db_network
     restart: always
     deploy:
       resources:
@@ -116,73 +108,6 @@ services:
       --log-level ${LOG_LEVEL:-info}
       --preload
       --chdir /app/src
-      config.wsgi:application
-    volumes:
-      - ./backend/keys:/app/keys:ro
-      - static_files:/app/static
-      - media_files:/app/media
-      - backend_logs:/app/logs
-    environment: &backend_env_prod
-      # Django settings - PRODUCTION
-      DJANGO_SETTINGS_MODULE: config.settings.production
-      SECRET_KEY: ${SECRET_KEY}
-      DEBUG: False
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
-      ENVIRONMENT: production
-      
-      # Database URL (PostgreSQL) - Single URL instead of multiple variables
-      DATABASE_URL: ${DATABASE_URL}
-      
-      # Redis URLs - Simplified to just URLs
-      REDIS_URL: ${REDIS_URL}
-      CACHE_URL: ${CACHE_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
-      
-      # CORS
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
-      
-      # File Storage
-      STATIC_ROOT: /app/static
-      MEDIA_ROOT: /app/media
-      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-52428800}
-      
-      # AWS S3 (if using cloud storage)
-      USE_S3: ${USE_S3:-False}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-}
-      AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME:-}
-      
-      # Email
-      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
-      EMAIL_HOST: ${EMAIL_HOST:-}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
-      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
-      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@p2p.com}
-      
-      # Logging
-      DJANGO_LOG_LEVEL: ${DJANGO_LOG_LEVEL:-INFO}
-      SQL_LOG_LEVEL: ${SQL_LOG_LEVEL:-WARNING}
-      
-      # Security - Production
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-True}
-      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-True}
-      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-True}
-      SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS:-31536000}
-      SECURE_HSTS_INCLUDE_SUBDOMAINS: ${SECURE_HSTS_INCLUDE_SUBDOMAINS:-True}
-      SECURE_HSTS_PRELOAD: ${SECURE_HSTS_PRELOAD:-True}
-      
-      # Monitoring
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     expose:
       - "8000"
     networks:

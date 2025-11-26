@@ -306,46 +306,201 @@ class ApprovalActionsTest(TransactionTestCase):
                 'comment': 'Trying to approve after rejection'
             }
         )
+        # First approve at level 1
+        self.client.force_authenticate(user=self.approver_l1)
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 1,
+                'comment': 'Level 1 approved'
+            }
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['request_status'], 'PENDING')  # Still pending level 2
+        self.assertFalse(response.data['is_fully_approved'])
+        self.assertEqual(response.data['pending_levels'], [2])
+        
+        # Now approve at level 2
+        self.client.force_authenticate(user=self.approver_l2)
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 2,
+                'comment': 'Level 2 approved'
+            }
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['request_status'], 'APPROVED')
+        self.assertTrue(response.data['is_fully_approved'])
+        self.assertEqual(response.data['pending_levels'], [])
+    
+    def test_reject_request(self):
+        """Test request rejection."""
+        self.client.force_authenticate(user=self.approver_l1)
+        
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/reject/',
+            {
+                'level': 1,
+                'comment': 'Rejected due to insufficient justification'
+            }
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['message'], 'Request rejected at level 1')
+        self.assertEqual(response.data['request_status'], 'REJECTED')
+        self.assertFalse(response.data['is_fully_approved'])
+        
+        # Verify approval record was created with rejection
+        approval = Approval.objects.get(request=self.purchase_request, level=1)
+        self.assertEqual(approval.decision, 'REJECTED')
+        self.assertEqual(approval.comment, 'Rejected due to insufficient justification')
+    
+    def test_reject_without_comment_fails(self):
+        """Test that rejection without comment fails."""
+        self.client.force_authenticate(user=self.approver_l1)
+        
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/reject/',
+            {
+                'level': 1,
+                'comment': ''
+            }
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error']['code'], 'REJECTION_COMMENT_REQUIRED')
+    
+    def test_insufficient_permissions(self):
+        """Test approval with insufficient permissions."""
+        # Staff user trying to approve
+        self.client.force_authenticate(user=self.staff_user)
+        
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 1,
+                'comment': 'Trying to approve'
+            }
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        
+        # Level 1 approver trying to approve level 2
+        self.client.force_authenticate(user=self.approver_l1)
+        
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 2,
+                'comment': 'Trying level 2'
+            }
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_approve_non_pending_request(self):
+        """Test approval of non-pending request fails."""
+        # First approve the request
+        self.client.force_authenticate(user=self.approver_l1)
+        self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 1,
+                'comment': 'Initial approval'
+            }
+        )
+        
+        # Try to approve again
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 1,
+                'comment': 'Second approval attempt'
+            }
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error']['code'], 'REQUEST_NOT_PENDING')
+    
+    def test_idempotent_approval(self):
+        """Test that duplicate approvals by same user are idempotent."""
+        self.client.force_authenticate(user=self.approver_l1)
+        
+        # First approval
+        response1 = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 1,
+                'comment': 'First approval'
+            }
+        )
+        
+        self.assertEqual(response1.status_code, status.HTTP_200_OK)
+        self.assertEqual(response1.data['action'], 'created')
+        
+        # Reset request to pending for second test
+        self.purchase_request.status = 'PENDING'
+        self.purchase_request.save()
+        
+        # Second approval by same user (should update)
+        response2 = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 1,
+                'comment': 'Updated approval'
+            }
+        )
+        
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        self.assertEqual(response2.data['action'], 'updated')
+        
+        # Verify only one approval record exists
+        approvals = Approval.objects.filter(request=self.purchase_request, level=1)
+        self.assertEqual(approvals.count(), 1)
+        self.assertEqual(approvals.first().comment, 'Updated approval')
+    
+    def test_approval_level_not_required(self):
+        """Test approval at level not required for request amount."""
+        # Request amount is $500, so only level 1 is required
+        self.client.force_authenticate(user=self.approver_l2)
+        
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 2,
+                'comment': 'Level 2 approval'
+            }
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error']['code'], 'APPROVAL_LEVEL_NOT_REQUIRED')
+    
+    def test_approve_after_rejection_fails(self):
+        """Test that approval after rejection fails."""
+        # First reject the request
+        self.client.force_authenticate(user=self.approver_l1)
+        self.client.post(
+            f'/api/requests/{self.purchase_request.id}/reject/',
+            {
+                'level': 1,
+                'comment': 'Rejected'
+            }
+        )
+        
+        # Reset to pending and try to approve
+        self.purchase_request.status = 'PENDING'
+        self.purchase_request.save()
+        
+        response = self.client.post(
+            f'/api/requests/{self.purchase_request.id}/approve/',
+            {
+                'level': 1,
+                'comment': 'Trying to approve after rejection'
+            }
+        )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['error']['code'], 'REQUEST_ALREADY_REJECTED')
-
-
-def run_tests():
-    """Run the approval actions tests."""
-    # print("Running approval actions tests...")
-    
-    # Create test suite
-    test_suite = django.test.TestSuite()
-    
-    # Add test methods
-    test_methods = [
-        'test_approve_level_1_success',
-        'test_approve_level_2_required',
-        'test_reject_request',
-        'test_reject_without_comment_fails',
-        'test_insufficient_permissions',
-        'test_approve_non_pending_request',
-        'test_idempotent_approval',
-        'test_approval_level_not_required',
-        'test_approve_after_rejection_fails',
-    ]
-    
-    for method in test_methods:
-        test_suite.addTest(ApprovalActionsTest(method))
-    
-    # Run tests
-    runner = django.test.TextTestRunner(verbosity=2)
-    result = runner.run(test_suite)
-    
-    if result.wasSuccessful():
-        # print("\n✅ All approval actions tests passed!")
-        return True
-    else:
-        # print(f"\n❌ {len(result.failures)} test(s) failed, {len(result.errors)} error(s)")
-        return False
-
-
-if __name__ == '__main__':
-    success = run_tests()
-    sys.exit(0 if success else 1)

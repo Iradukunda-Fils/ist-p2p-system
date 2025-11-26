@@ -142,7 +142,10 @@ class EnhancedAPIClient {
     // Wait before retrying
     await this.sleep(delay);
 
-    // Update retry count
+    // Ensure metadata exists before updating retry count
+    if (!config.metadata) {
+      config.metadata = {};
+    }
     config.metadata.retryCount = retryCount;
 
     try {
