@@ -1,56 +1,41 @@
 # ============================================================================
 # P2P Procurement System - Production Docker Compose
 # ============================================================================
-# Optimized for production with security, performance, and reliability
-# ===
+# Optimized for production on AWS EC2 (t2.micro)
+# ============================================================================
 
 x-backend-environment: &back_environ
   # Core Django
-  DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+  DJANGO_SETTINGS_MODULE: config.settings.production
   SECRET_KEY: ${SECRET_KEY}
   DEBUG: ${DEBUG:-False}
   ENVIRONMENT: ${ENVIRONMENT:-production}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS}
   
   # Database
-  DATABASE_URL: postgresql://${DATABASE_USER:-postgres}:${DATABASE_PASSWORD:-postgres}@db:5432/${DATABASE_NAME:-p2p_procurement}
-  DATABASE_NAME: ${DATABASE_NAME:-p2p_procurement}
-  DATABASE_USER: ${DATABASE_USER:-postgres}
-  DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  DATABASE_NAME: ${POSTGRES_DB}
+  DATABASE_USER: ${POSTGRES_USER}
+  DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
   DATABASE_HOST: db
   DATABASE_PORT: 5432
   
   # Redis & Cache
-  REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
   REDIS_HOST: redis
   REDIS_PORT: 6379
-  REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_dev_password}
-  CACHE_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/1
-  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/2
-  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/3
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  CACHE_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/2
+  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/3
   
   # File Paths
-  STATIC_ROOT: /app/src/staticfiles
+  STATIC_ROOT: /app/staticfiles
   MEDIA_ROOT: /app/media
   STATIC_URL: /static/
   MEDIA_URL: /media/
-
-x-backend-depends-on: &backend-depends-on
-  db:
-    condition: service_healthy
-  redis:
-    condition: service_healthy
-
-x-common-healthcheck: &common-healthcheck
-  interval: 30s
-  timeout: 10s
-  retries: 3
-
-x-logging: &default-logging
-  driver: "json-file"
-  options:
-    max-size: "10m"
-    max-file: "3"
-
 
 services:
   # ========================================================================
@@ -63,39 +48,23 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/backups:/backups:ro
     environment:
-      POSTGRES_DB: ${DATABASE_NAME:-p2p_procurement_prod}
-      POSTGRES_USER: ${DATABASE_USER:-p2p_admin}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGDATA: /var/lib/postgresql/data
-    # No exposed ports in production - internal access only
+    # SECURITY: No exposed ports to host, only accessible via internal network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - db_network
     restart: always
-    command: >
-      postgres
-      -c max_connections=200
-      -c shared_buffers=512MB
-      -c effective_cache_size=2GB
-      -c maintenance_work_mem=128MB
-      -c checkpoint_completion_target=0.9
-      -c wal_buffers=16MB
-      -c default_statistics_target=100
-      -c random_page_cost=1.1
-      -c effective_io_concurrency=200
-      -c timezone=UTC
     # deploy:
     #   resources:
     #     limits:
-    #       cpus: '2.0'
-    #       memory: 2G
-    #     reservations:
-    #       cpus: '0.5'
+    #       cpus: '1.0'
     #       memory: 512M
 
   # ========================================================================
@@ -106,98 +75,93 @@ services:
     container_name: p2p_redis_prod
     command: >
       redis-server
-      --appendonly yes
       --requirepass ${REDIS_PASSWORD}
-      --maxmemory 512mb
+      --maxmemory 256mb
       --maxmemory-policy allkeys-lru
-      --save 900 1
-      --save 300 10
-      --save 60 10000
+      --save ""
     volumes:
       - redis_data:/data
-    # No exposed ports in production
+    # SECURITY: No exposed ports to host
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - db_network
     restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 256M
 
   # ========================================================================
   # Django Backend - Production
   # ========================================================================
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runtime
+    image: iradukunda84/p2p_backend:1.0.1
     container_name: p2p_backend_prod
     command: >
       gunicorn
       --bind 0.0.0.0:8000
-      --workers ${GUNICORN_WORKERS:-4}
+      --workers ${GUNICORN_WORKERS:-3}
       --worker-class ${GUNICORN_WORKER_CLASS:-sync}
       --timeout ${GUNICORN_TIMEOUT:-300}
-      --max-requests ${GUNICORN_MAX_REQUESTS:-1000}
-      --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50}
-      --access-logfile /app/logs/access.log
-      --error-logfile /app/logs/error.log
+      --access-logfile -
+      --error-logfile -
       --log-level ${LOG_LEVEL:-info}
-      --preload
-      --chdir /app/src
-    expose:
-      - "8000"
+      config.wsgi:application
+    # EXPOSED: Port 8000 exposed to host for external API access (as requested)
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/keys:/app/keys
+      - backend_logs:/app/logs
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    tmpfs:
+      - /var/log/p2p
+    environment: *back_environ
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - app_network
       - db_network
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=5)\" || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1.0'
+    #       memory: 1G
 
   # ========================================================================
   # Celery Worker - Production
   # ========================================================================
   celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runtime
+    image: iradukunda84/p2p_celery_worker:1.0.1
     container_name: p2p_celery_worker_prod
     command: >
       celery -A config worker
       --loglevel=${CELERY_WORKER_LOG_LEVEL:-info}
-      --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --max-tasks-per-child=1000
-      --time-limit=300
-      --soft-time-limit=240
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
     volumes:
-      - ./backend/keys:/app/keys:ro
-      - media_files:/app/media
+      - ./backend/keys:/app/keys
       - backend_logs:/app/logs
-    environment: *backend_env_prod
+      - media_volume:/app/media
+    tmpfs:
+      - /var/log/p2p
+    environment:
+      <<: *back_environ
+      SKIP_COLLECTSTATIC: "true"
     depends_on:
       db:
         condition: service_healthy
@@ -209,29 +173,27 @@ services:
       - app_network
       - db_network
     restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '1.5'
-          memory: 1G
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 512M
 
   # ========================================================================
   # Celery Beat - Production
   # ========================================================================
   celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runtime
+    image: iradukunda84/p2p_celery_beat:1.0.1
     container_name: p2p_celery_beat_prod
-    command: celery -A config beat --loglevel=${CELERY_BEAT_LOG_LEVEL:-info} --pidfile=/tmp/celerybeat.pid
+    command: celery -A config beat --loglevel=${CELERY_BEAT_LOG_LEVEL:-info}
     volumes:
-      - ./backend/keys:/app/keys:ro
+      - ./backend/keys:/app/keys
       - backend_logs:/app/logs
-    environment: *backend_env_prod
+    tmpfs:
+      - /var/log/p2p
+    environment:
+      <<: *back_environ
+      SKIP_COLLECTSTATIC: "true"
     depends_on:
       redis:
         condition: service_healthy
@@ -241,83 +203,56 @@ services:
       - app_network
       - db_network
     restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.1'
-          memory: 64M
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.2'
+    #       memory: 256M
 
   # ========================================================================
   # React Frontend - Production
   # ========================================================================
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: runtime
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-        VITE_APP_TITLE: ${VITE_APP_TITLE:-P2P Procurement System}
+    image: iradukunda84/p2p_frontend:1.0.1
     container_name: p2p_frontend_prod
+    # Internal only - served via Nginx
     expose:
       - "3000"
     networks:
       - app_network
     restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.1'
-          memory: 64M
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 256M
 
   # ========================================================================
   # Nginx Gateway - Production
   # ========================================================================
   nginx:
-    build:
-      context: ./nginx
-      dockerfile: Dockerfile
+    image: iradukunda84/p2p_nginx_gateway:1.0.1
     container_name: p2p_nginx_gateway_prod
+    # EXPOSED: HTTP/HTTPS ports for frontend access
     ports:
       - "80:80"
       - "443:443"
+    volumes:
+      - static_volume:/usr/share/nginx/html/static:ro
+      - media_volume:/usr/share/nginx/html/media:ro
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
       frontend:
-        condition: service_healthy
+        condition: service_started
     networks:
       - app_network
     restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    volumes:
-      - nginx_logs:/var/log/nginx
-      - ./nginx/ssl:/etc/nginx/ssl:ro  # SSL certificates
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 256M
 
   # ========================================================================
   # Log Aggregation (Optional)
@@ -365,17 +300,11 @@ services:
 # ============================================================================
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
-  static_files:
-    driver: local
-  media_files:
-    driver: local
+  static_volume:
+  media_volume:
   backend_logs:
-    driver: local
   nginx_logs:
-    driver: local
 
 # ============================================================================
 # Networks
@@ -383,11 +312,8 @@ volumes:
 networks:
   app_network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.29.0.0/16
   
   # Isolated network for database - production security
   db_network:
     driver: bridge
-    internal: true  # No external access in production
+    internal: true

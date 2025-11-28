@@ -69,12 +69,12 @@ SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=True, cast=bool)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=True, cast=bool)
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=True, cast=bool)
 X_FRAME_OPTIONS = 'DENY'
 
 # Production logging
-LOGGING['handlers']['file']['filename'] = '/var/log/p2p/django.log'
+LOGGING['handlers']['file']['filename'] = '/app/logs/django.log'
 LOGGING['handlers']['console']['level'] = 'WARNING'
 LOGGING['loggers']['django']['level'] = 'WARNING'
 LOGGING['loggers']['p2p']['level'] = 'INFO'

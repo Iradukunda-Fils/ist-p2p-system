@@ -25,7 +25,10 @@ echo "========================================"
 # ============================================================================
 echo -e "${YELLOW}[1/7] Checking JWT keys...${NC}"
 
-mkdir -p /app/keys
+# Create keys directory only if it doesn't exist (it may be a mount point)
+if [ ! -d /app/keys ]; then
+    mkdir -p /app/keys
+fi
 
 if [ ! -f /app/keys/jwt_private.pem ]; then
     echo "Generating new JWT private key..."
