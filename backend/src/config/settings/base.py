@@ -29,6 +29,8 @@ THIRD_PARTY_APPS = [
     'drf_spectacular',
     'storages',
     'django_filters',
+    'django_celery_beat',  # Celery Beat scheduler with database backend
+    'django_celery_results',  # Store task results in Django database
 ]
 
 LOCAL_APPS = [
@@ -225,15 +227,7 @@ CELERY_TASK_CREATE_MISSING_QUEUES = True
 CELERY_WORKER_SEND_TASK_EVENTS = True
 CELERY_TASK_SEND_SENT_EVENT = True
 
-# Celery Beat Configuration (for periodic tasks)
-CELERY_BEAT_SCHEDULE = {
-    'cleanup-expired-results': {
-        'task': 'config.celery.health_check',
-        'schedule': 300.0,  # Run every 5 minutes
-    },
-}
-
-# Queue definitions
+# Queue definitions (replaces deprecated CELERY_ROUTES)
 CELERY_TASK_ROUTES = {
     'documents.tasks.*': {'queue': 'documents'},
     'purchases.tasks.*': {'queue': 'purchases'},
@@ -241,14 +235,28 @@ CELERY_TASK_ROUTES = {
     'purchases.tasks.notify_finance_team': {'queue': 'notifications'},
 }
 
+# Celery Beat Configuration (for periodic tasks)
+# NOTE: With django_celery_beat installed, schedules are managed via Django Admin
+# This static schedule is kept as a fallback
+CELERY_BEAT_SCHEDULE = {
+    'celery-health-check': {
+        'task': 'config.celery.health_check',
+        'schedule': 300.0,  # Run every 5 minutes
+    },
+}
+
+# Use database scheduler for Celery Beat
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
 # Cache Configuration - URL-based for Docker compatibility
-CACHE_URL = config('CACHE_URL', default='redis://localhost:6379/1')
+CACHE_URL = config('CACHE_URL', default='redis://localhost:6379/2')
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': CACHE_URL,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'PASSWORD': config('REDIS_PASSWORD', default=''),
         }
     }
 }

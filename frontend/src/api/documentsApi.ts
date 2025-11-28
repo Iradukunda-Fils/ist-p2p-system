@@ -49,6 +49,7 @@ export interface DocumentMetadata {
 export interface DocumentUploadResponse {
     message: string;
     document: Document;
+    task_id?: string;
 }
 
 /**

@@ -13,9 +13,6 @@ FROM node:20-alpine AS builder
 LABEL maintainer="P2P Procurement Team"
 LABEL description="Builder stage for React frontend"
 
-# Install build dependencies
-RUN apk add --no-cache git
-
 # Set working directory
 WORKDIR /app
 
@@ -23,7 +20,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies with optimizations
-RUN npm ci --only=production=false --no-audit --no-fund && \
+# Note: npm ci installs all dependencies by default (including devDependencies)
+RUN npm ci --prefer-offline --no-audit --no-fund && \
     npm cache clean --force
 
 # Copy source code

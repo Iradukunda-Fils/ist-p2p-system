@@ -61,6 +61,16 @@ class EnhancedAPIClient {
 
   private handleRequest(config: ExtendedAxiosRequestConfig): ExtendedAxiosRequestConfig {
     const access = cookieUtils.getAccessToken();
+    
+    // Debug: Log when token is missing (except on login page)
+    if (!access && !config.url?.includes('/auth/token') && typeof window !== 'undefined') {
+      const currentPath = window.location?.pathname;
+      if (currentPath && currentPath !== '/login') {
+        console.warn('[API Client] No access token found. Cookie state:', 
+          secureCookieManager.debugCookieAccess());
+      }
+    }
+    
     if (access && config.headers) {
       config.headers.Authorization = `Bearer ${access}`;
     }

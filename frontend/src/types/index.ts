@@ -3,6 +3,8 @@
  * Centralized location for all TypeScript interfaces and types
  */
 
+import React from 'react';
+
 // ============================================================================
 // CORE TYPES
 // ============================================================================
@@ -135,6 +137,8 @@ export interface ApprovalResponse {
     request_status: RequestStatus;
     pending_levels?: number[];
     is_fully_approved: boolean;
+    po_task_id?: string;
+    po_generation_status?: string;
 }
 
 // Receipt validation result
@@ -162,6 +166,7 @@ export interface ReceiptValidationStatus {
 
 // Purchase Order types
 export type POStatus = 'DRAFT' | 'SENT' | 'ACKNOWLEDGED' | 'FULFILLED';
+
 
 export interface PurchaseOrder {
     id: string;
@@ -269,4 +274,52 @@ export interface OrderQueryParams {
     ordering?: string;
     page?: number;
     page_size?: number;
+}
+
+// ============================================================================
+// CELERY TASK TYPES
+// ============================================================================
+
+export type TaskState = 'PENDING' | 'STARTED' | 'RETRY' | 'FAILURE' | 'SUCCESS' | 'REVOKED';
+
+export interface TaskResult {
+    task_id: string;
+    status: TaskState;
+    ready: boolean;
+    successful: boolean | null;
+    failed: boolean | null;
+    result?: any;
+    error?: string;
+    traceback?: string;
+    info?: any;
+    exception?: string;
+}
+
+export interface ActiveTask {
+    task_id: string;
+    name: string;
+    worker: string;
+    args: any[];
+    kwargs: Record<string, any>;
+    time_start: number;
+}
+
+export interface ActiveTasksResponse {
+    active_tasks: ActiveTask[];
+    workers: number;
+    total_tasks: number;
+}
+
+export interface WorkerInfo {
+    name: string;
+    alive: boolean;
+    registered_tasks: number;
+    stats?: any;
+}
+
+export interface WorkerStatusResponse {
+    status: string;
+    workers: WorkerInfo[];
+    total_workers: number;
+    healthy: boolean;
 }

@@ -34,6 +34,19 @@ urlpatterns = [
     path('api/purchases/', include('purchases.urls')),
     path('api/documents/', include('documents.urls')),
     path('api/core/', include('core.urls')),
+    
+    # Celery Task Monitoring - Handled below
+    # path('api/tasks/<str:task_id>/', include('core.celery_views')),
+]
+
+
+# Direct Celery monitoring endpoints (not included in app)
+from core.celery_views import get_task_status, list_active_tasks, celery_worker_status
+
+urlpatterns += [
+    path('api/tasks/<str:task_id>/', get_task_status, name='task_status'),
+    path('api/tasks/', list_active_tasks, name='task_list'),
+    path('api/celery/status/', celery_worker_status, name='celery_status'),
 ]
 
 

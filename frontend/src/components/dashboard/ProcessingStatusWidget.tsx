@@ -11,7 +11,9 @@ export const ProcessingStatusWidget: React.FC = () => {
     const { data, isLoading, error } = useQuery({
         queryKey: ['processing-status'],
         queryFn: () => documentsApi.getProcessingStatus(),
-        refetchInterval: 30000, // Refetch every 30 seconds
+        refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
+        refetchIntervalInBackground: true, // Continue polling in background
+        staleTime: 5000, // Consider data stale after 5 seconds
     });
 
     if (isLoading) {

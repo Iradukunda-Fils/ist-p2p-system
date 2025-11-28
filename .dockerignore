@@ -1,20 +1,41 @@
-# Byte-compiled / cache files
+# ============================
+# PYTHON / DJANGO
+# ============================
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 *.pdb
+*.egg
+*.egg-info/
+.eggs/
 
-# Django stuff
+# virtual env
+.venv/
+venv/
+
+# django & runtime
 *.log
-*.pot
-*.pyc
 db.sqlite3
-media/
-staticfiles/
-.env
 
-# Node / frontend stuff
+# collected files
+static/
+staticfiles/
+media/
+
+# environment files
+.env.*
+*.secret
+
+# cache
+*.coverage
+*.cache/
+pip-wheel-metadata/
+wheels/
+
+# ============================
+# NODE / FRONTEND
+# ============================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -22,21 +43,72 @@ yarn-error.log*
 dist/
 build/
 
-# IDE / editor files
+# package installers
+*.tgz
+
+# ============================
+# EDITORS
+# ============================
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
 *.swp
+*.code-workspace
+.history/
 
-# OS generated files
+# ============================
+# OPERATING SYSTEM FILES
+# ============================
 .DS_Store
 Thumbs.db
+desktop.ini
 *.bak
+*.tmp
+*.temp
 
-# Git files
-.git
+# ============================
+# GIT
+# ============================
+.git/
 .gitignore
 
-# Docker files
+# ============================
+# DOCKER
+# ============================
+# never ignore the actual Dockerfile used for prod build
+Dockerfile*
+!Dockerfile
 docker-compose.override.yml
+docker-data/
+volumes/
+data/
+tmp/
+
+# Docker logs
+*.pid
+*.sock
+
+# ============================
+# TEST / COVERAGE
+# ============================
+pytest_cache/
+htmlcov/
+__snapshots__/
+jest-cache/
+jest-*
+coverage.xml
+
+# ============================
+# BACKUP / ARTIFACTS
+# ============================
+*.zip
+*.tar
+*.tar.gz
+*.bak
+
+# ============================
+# MISC PROTECTION
+# ============================
+*.local
+*.backup

@@ -130,15 +130,23 @@ class DocumentViewSet(viewsets.ModelViewSet):
             raise
         
         try:
-            self.perform_create(serializer)
+            # Save serializer but skip auto-processing to capture task_id
+            instance = serializer.save()
+            instance._skip_processing = True
+            
+            # Manually trigger processing to get task_id
+            from documents.tasks import extract_document_metadata
+            task = extract_document_metadata.delay(str(instance.id))
+            
             headers = self.get_success_headers(serializer.data)
             
-            logger.info(f"Document uploaded successfully: {serializer.data.get('id')}")
+            logger.info(f"Document uploaded successfully: {serializer.data.get('id')}, Task ID: {task.id}")
             
             return Response(
                 {
                     'message': 'Document uploaded successfully',
-                    'document': serializer.data
+                    'document': serializer.data,
+                    'task_id': task.id
                 },
                 status=status.HTTP_201_CREATED,
                 headers=headers

@@ -17,6 +17,7 @@ interface UseApprovalReturn {
     isApproving: boolean;
     isRejecting: boolean;
     reset: () => void;
+    poTaskId?: string;
 }
 
 /**
@@ -25,7 +26,8 @@ interface UseApprovalReturn {
  */
 export const useApproval = ({ requestId, onSuccess }: UseApprovalOptions): UseApprovalReturn => {
     const queryClient = useQueryClient();
-    const [comment, setComment] = useState('');
+    const [comment, setComment] = useState<string>('');
+    const [poTaskId, setPoTaskId] = useState<string | undefined>(undefined);
 
     const validateResponse = (response: ApprovalResponse): boolean => {
         if (!response.approval) {
@@ -47,6 +49,12 @@ export const useApproval = ({ requestId, onSuccess }: UseApprovalOptions): UseAp
                 queryClient.invalidateQueries({ queryKey: ['request', requestId] });
                 queryClient.invalidateQueries({ queryKey: ['requests'] });
                 setComment('');
+                
+                // Set PO task ID if present
+                if (response.po_task_id) {
+                    setPoTaskId(response.po_task_id);
+                }
+                
                 onSuccess?.();
             }
         },
@@ -99,6 +107,7 @@ export const useApproval = ({ requestId, onSuccess }: UseApprovalOptions): UseAp
 
     const reset = () => {
         setComment('');
+        setPoTaskId(undefined);
         approveMutation.reset();
         rejectMutation.reset();
     };
@@ -111,5 +120,6 @@ export const useApproval = ({ requestId, onSuccess }: UseApprovalOptions): UseAp
         isApproving: approveMutation.isPending,
         isRejecting: rejectMutation.isPending,
         reset,
+        poTaskId,
     };
 };

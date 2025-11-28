@@ -9,6 +9,7 @@ import { Spinner } from '@/components/common/Spinner';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { Modal } from '@/components/common/Modal';
 import { Input } from '@/components/common/Input';
+import { TaskProgress } from '@/components/common/TaskProgress';
 import { ApprovalTimeline } from '@/components/requests/ApprovalTimeline';
 import { ReceiptSection } from '@/components/requests/ReceiptSection';
 import { formatCurrency, formatDateTime } from '@/utils/formatters';
@@ -201,22 +202,35 @@ const RequestDetail: React.FC = () => {
                 {/* Actions */}
                 {showApproveButton && (
                     <Card>
-                        <div className="flex space-x-3">
-                            <Button 
-                                onClick={approveModal.open}
-                                disabled={approval.isApproving || approval.isRejecting}
-                                aria-label="Open approve request dialog"
-                            >
-                                {approval.isApproving ? 'Approving...' : 'Approve Request'}
-                            </Button>
-                            <Button 
-                                variant="danger" 
-                                onClick={rejectModal.open}
-                                disabled={approval.isApproving || approval.isRejecting}
-                                aria-label="Open reject request dialog"
-                            >
-                                {approval.isRejecting ? 'Rejecting...' : 'Reject Request'}
-                            </Button>
+                        <div className="space-y-4">
+                            {approval.poTaskId && (
+                                <TaskProgress 
+                                    taskId={approval.poTaskId} 
+                                    onComplete={() => {
+                                        // Refresh request data to show the new PO
+                                        approval.reset();
+                                        // We could also navigate to the PO or show a success message
+                                    }}
+                                />
+                            )}
+                            
+                            <div className="flex space-x-3">
+                                <Button 
+                                    onClick={approveModal.open}
+                                    disabled={approval.isApproving || approval.isRejecting || !!approval.poTaskId}
+                                    aria-label="Open approve request dialog"
+                                >
+                                    {approval.isApproving ? 'Approving...' : 'Approve Request'}
+                                </Button>
+                                <Button 
+                                    variant="danger" 
+                                    onClick={rejectModal.open}
+                                    disabled={approval.isApproving || approval.isRejecting || !!approval.poTaskId}
+                                    aria-label="Open reject request dialog"
+                                >
+                                    {approval.isRejecting ? 'Rejecting...' : 'Reject Request'}
+                                </Button>
+                            </div>
                         </div>
                     </Card>
                 )}

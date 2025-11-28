@@ -197,10 +197,12 @@ class Document(models.Model):
         super().save(*args, **kwargs)
         
         # Trigger processing asynchronously for new documents only
+        # Check for _skip_processing flag to allow manual triggering (e.g. in ViewSet)
         if is_new_document and not kwargs.get('update_fields') and self.processing_status == 'PENDING':
-            # Use Django's transaction.on_commit to ensure the document is saved before queuing
-            from django.db import transaction
-            transaction.on_commit(lambda: self._trigger_processing_async())
+            if not getattr(self, '_skip_processing', False):
+                # Use Django's transaction.on_commit to ensure the document is saved before queuing
+                from django.db import transaction
+                transaction.on_commit(lambda: self._trigger_processing_async())
 
     def delete(self, *args, **kwargs):
         """

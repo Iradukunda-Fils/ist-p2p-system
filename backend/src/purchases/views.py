@@ -295,14 +295,18 @@ class PurchaseRequestViewSet(viewsets.ModelViewSet):
                     # Trigger PO generation (Requirement 3.4)
                     try:
                         from .tasks import generate_purchase_order
-                        generate_purchase_order.delay(str(pr.id))
+                        task = generate_purchase_order.delay(str(pr.id))
                         po_generation_status = "Purchase order generation initiated"
+                        po_task_id = task.id
                     except ImportError:
                         po_generation_status = "Purchase order generation not available"
+                        po_task_id = None
                     except Exception as e:
                         po_generation_status = f"Purchase order generation failed: {str(e)}"
+                        po_task_id = None
                 else:
                     po_generation_status = None
+                    po_task_id = None
                 
                 # Prepare response data
                 response_data = {

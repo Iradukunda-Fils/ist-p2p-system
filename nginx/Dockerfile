@@ -11,10 +11,9 @@ LABEL description="Nginx gateway for P2P Procurement System"
 LABEL version="1.0.0"
 
 # Install additional tools
+# Note: openssl only needed if generating SSL certs at runtime
 RUN apk add --no-cache \
     curl \
-    wget \
-    openssl \
     tzdata
 
 # Remove default nginx configuration

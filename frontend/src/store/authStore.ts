@@ -50,6 +50,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             secureCookieManager.setAuthTokens(response.access, response.refresh);
             secureCookieManager.setUserData(response.user);
 
+            // Verify tokens were stored and are accessible
+            const verification = secureCookieManager.debugCookieAccess();
+            if (!verification.canRead || !verification.details.hasAccessToken) {
+                logger.error('Cookie storage verification failed', null, { 
+                    context: 'Auth', 
+                    data: verification 
+                });
+                console.error('[Auth] Tokens stored but not accessible:', verification);
+            } else {
+                logger.info('Login successful, tokens verified', { 
+                    context: 'Auth',
+                    data: { hasAccess: verification.details.hasAccessToken, hasRefresh: verification.details.hasRefreshToken }
+                });
+            }
+
             const now = Date.now();
             set({
                 user: response.user,

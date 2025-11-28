@@ -14,20 +14,28 @@ import { ApprovalSummaryWidget } from '@/components/dashboard/ApprovalSummaryWid
 import { LatestRequestsCard } from '@/components/dashboard/LatestRequestsCard';
 import { DashboardStatsCard } from '@/components/dashboard/DashboardStatsCard';
 import { ProcessingStatusWidget } from '@/components/dashboard/ProcessingStatusWidget';
+import { ActiveTasksWidget } from '@/components/dashboard/ActiveTasksWidget';
 import { DashboardGrid, DashboardStatsGrid, DashboardContentGrid, DashboardColumn } from '@/components/dashboard/DashboardGrid';
-import { useDashboardQueries } from '@/hooks/useDashboard';
+import { LiveIndicator, WorkerStatusIndicator } from '@/components/common/LiveIndicator';
+import { useLiveDashboardData, useRealtimeStats, usePollingControl } from '@/hooks/useRealtimeData';
 
 const Dashboard: React.FC = () => {
     const { user } = useAuthStore();
     const navigate = useNavigate();
+    const pollingControl = usePollingControl();
 
-    // Use enhanced dashboard data fetching
+    // Use real-time dashboard data with polling
     const {
-        latestRequests,
-        stats,
-        hasError,
-        refetchAll
-    } = useDashboardQueries();
+        data: dashboardData,
+        isLoading,
+        error,
+        lastUpdate,
+        isLive,
+        refetch
+    } = useLiveDashboardData(pollingControl.isEnabled ? pollingControl.interval : undefined);
+
+    // Real-time stats with trend detection
+    const stats = useRealtimeStats(pollingControl.isEnabled ? pollingControl.interval : undefined);
 
     if (!user) return null;
 
@@ -36,7 +44,7 @@ const Dashboard: React.FC = () => {
     const isFinance = user.role === 'finance' || user.role === 'admin';
 
     // Handle error state
-    if (hasError) {
+    if (error) {
         return (
             <MainLayout>
                 <EmptyState
@@ -44,12 +52,15 @@ const Dashboard: React.FC = () => {
                     description="There was an error loading your dashboard data. Please try again."
                     action={{
                         label: "Retry",
-                        onClick: refetchAll
+                        onClick: refetch
                     }}
                 />
             </MainLayout>
         );
     }
+
+    const latestRequests = dashboardData?.latestRequests || [];
+    const statsData = stats.data;
 
     return (
         <MainLayout>
@@ -57,20 +68,30 @@ const Dashboard: React.FC = () => {
                 {/* Breadcrumb Navigation */}
                 <Breadcrumb />
                 
-                {/* Page Header */}
+                {/* Page Header with Live Indicators */}
                 <PageHeader
                     title="Dashboard"
                     subtitle={`Welcome back, ${user.username}. Here's what's happening with your procurement system.`}
                     size="lg"
+                    actions={
+                        <div className="flex items-center space-x-3">
+                            <WorkerStatusIndicator />
+                            <LiveIndicator 
+                                lastUpdate={lastUpdate} 
+                                isLive={isLive}
+                                pollingControl={pollingControl}
+                            />
+                        </div>
+                    }
                 />
 
-                {/* Stats Grid */}
+                {/* Stats Grid with Real-time Updates */}
                 <DashboardStatsGrid>
-                    {isStaff && stats.data?.userSpecificStats.staff && (
+                    {isStaff && statsData?.userSpecificStats.staff && (
                         <>
                             <DashboardStatsCard
                                 title="My Requests"
-                                value={stats.data.userSpecificStats.staff.myRequests}
+                                value={statsData.userSpecificStats.staff.myRequests}
                                 isLoading={stats.isLoading}
                                 color="blue"
                                 icon={
@@ -81,7 +102,7 @@ const Dashboard: React.FC = () => {
                             />
                             <DashboardStatsCard
                                 title="Pending Approvals"
-                                value={stats.data.userSpecificStats.staff.pendingApprovals}
+                                value={statsData?.userSpecificStats.staff.pendingApprovals || 0}
                                 isLoading={stats.isLoading}
                                 color="yellow"
                                 icon={
@@ -93,11 +114,11 @@ const Dashboard: React.FC = () => {
                         </>
                     )}
 
-                    {isApprover && stats.data?.userSpecificStats.approver && (
+                    {isApprover && statsData?.userSpecificStats.approver && (
                         <>
                             <DashboardStatsCard
                                 title="Pending Approvals"
-                                value={stats.data.userSpecificStats.approver.pendingApprovals}
+                                value={statsData.userSpecificStats.approver.pendingApprovals}
                                 isLoading={stats.isLoading}
                                 color="orange"
                                 icon={
@@ -108,7 +129,7 @@ const Dashboard: React.FC = () => {
                             />
                             <DashboardStatsCard
                                 title="Approved Today"
-                                value={stats.data.userSpecificStats.approver.approvedToday}
+                                value={statsData.userSpecificStats.approver.approvedToday}
                                 isLoading={stats.isLoading}
                                 color="green"
                                 icon={
@@ -120,11 +141,11 @@ const Dashboard: React.FC = () => {
                         </>
                     )}
 
-                    {isFinance && stats.data?.userSpecificStats.finance && (
+                    {isFinance && statsData?.userSpecificStats.finance && (
                         <>
                             <DashboardStatsCard
                                 title="Total POs"
-                                value={formatNumber(stats.data.userSpecificStats.finance.totalPOs)}
+                                value={formatNumber(statsData.userSpecificStats.finance.totalPOs)}
                                 isLoading={stats.isLoading}
                                 color="indigo"
                                 icon={
@@ -135,7 +156,7 @@ const Dashboard: React.FC = () => {
                             />
                             <DashboardStatsCard
                                 title="Total Value"
-                                value={formatCurrency(stats.data.userSpecificStats.finance.totalValue)}
+                                value={formatCurrency(statsData.userSpecificStats.finance.totalValue)}
                                 isLoading={stats.isLoading}
                                 color="green"
                                 icon={
@@ -149,7 +170,7 @@ const Dashboard: React.FC = () => {
 
                     <DashboardStatsCard
                         title="All Requests"
-                        value={stats.data?.totalRequests || 0}
+                        value={statsData?.totalRequests || 0}
                         isLoading={stats.isLoading}
                         color="gray"
                         icon={
@@ -165,8 +186,8 @@ const Dashboard: React.FC = () => {
                     {/* Latest Requests Card */}
                     <DashboardColumn.TwoThirds>
                         <LatestRequestsCard
-                            requests={latestRequests.data || []}
-                            isLoading={latestRequests.isLoading}
+                            requests={latestRequests}
+                            isLoading={isLoading}
                             onRequestClick={(id) => navigate(`/requests/${id}`)}
                         />
                     </DashboardColumn.TwoThirds>
@@ -176,6 +197,9 @@ const Dashboard: React.FC = () => {
                         <VStack size="component">
                             {/* Approval Summary for Approvers */}
                             {isApprover && <ApprovalSummaryWidget />}
+
+                            {/* Active Tasks Widget (Real-time) */}
+                            <ActiveTasksWidget />
 
                             {/* Processing Status Widget for all users */}
                             <ProcessingStatusWidget />
@@ -242,14 +266,14 @@ const Dashboard: React.FC = () => {
                     </DashboardColumn.OneThird>
                 </DashboardContentGrid>
 
-                {/* Analytics Chart */}
-                {stats.data && (
+                {/* Analytics Chart with Real-time Data */}
+                {statsData && (
                     <Card title="Requests Overview">
                         <SimpleBarChart 
                             data={[
-                                { label: 'Pending', value: stats.data.pendingRequests, color: 'bg-yellow-500' },
-                                { label: 'Approved', value: stats.data.approvedRequests, color: 'bg-green-500' },
-                                { label: 'Rejected', value: stats.data.rejectedRequests, color: 'bg-red-500' },
+                                { label: 'Pending', value: statsData.pendingRequests, color: 'bg-yellow-500' },
+                                { label: 'Approved', value: statsData.approvedRequests, color: 'bg-green-500' },
+                                { label: 'Rejected', value: statsData.rejectedRequests, color: 'bg-red-500' },
                             ]} 
                             height={200}
                         />

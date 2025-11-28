@@ -105,32 +105,40 @@ export const useDashboardQueries = () => {
 
   const queries = useQueries({
     queries: [
-      // Always fetch latest requests
+      // Always fetch latest requests - poll every 10 seconds
       {
         queryKey: dashboardKeys.latestRequests(10),
         queryFn: () => dashboardApi.getLatestRequests(10),
-        staleTime: 1 * 60 * 1000,
+        staleTime: 5 * 1000, // 5 seconds
+        refetchInterval: 10 * 1000, // Refresh every 10 seconds
+        refetchIntervalInBackground: true, // Continue polling when tab not active
         enabled: !!user,
       },
-      // Fetch dashboard stats
+      // Fetch dashboard stats - poll every 15 seconds
       {
         queryKey: dashboardKeys.stats(user?.id || ''),
         queryFn: () => dashboardApi.getDashboardStats(user!),
-        staleTime: 2 * 60 * 1000,
+        staleTime: 10 * 1000, // 10 seconds
+        refetchInterval: 15 * 1000, // Refresh every 15 seconds
+        refetchIntervalInBackground: true,
         enabled: !!user,
       },
-      // Fetch user requests for staff
+      // Fetch user requests for staff - poll every 15 seconds
       {
         queryKey: dashboardKeys.userRequests(user?.id || '', 5),
         queryFn: () => dashboardApi.getUserRequests(user!.id, 5),
-        staleTime: 1 * 60 * 1000,
+        staleTime: 10 * 1000,
+        refetchInterval: 15 * 1000, // Refresh every 15 seconds
+        refetchIntervalInBackground: true,
         enabled: !!user && isStaff,
       },
-      // Fetch pending approvals for approvers
+      // Fetch pending approvals for approvers - poll every 5 seconds (more critical)
       {
         queryKey: dashboardKeys.pendingApprovals(10),
         queryFn: () => dashboardApi.getPendingApprovals(10),
-        staleTime: 30 * 1000,
+        staleTime: 3 * 1000, // 3 seconds
+        refetchInterval: 5 * 1000, // Refresh every 5 seconds (more frequent for approvals)
+        refetchIntervalInBackground: true,
         enabled: !!user && isApprover,
       },
     ],
