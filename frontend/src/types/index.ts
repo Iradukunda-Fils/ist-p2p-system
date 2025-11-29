@@ -280,7 +280,7 @@ export interface OrderQueryParams {
 // CELERY TASK TYPES
 // ============================================================================
 
-export type TaskState = 'PENDING' | 'STARTED' | 'RETRY' | 'FAILURE' | 'SUCCESS' | 'REVOKED';
+export type TaskState = 'PENDING' | 'STARTED' | 'PROGRESS' | 'RETRY' | 'FAILURE' | 'SUCCESS' | 'REVOKED';
 
 export interface TaskResult {
     task_id: string;

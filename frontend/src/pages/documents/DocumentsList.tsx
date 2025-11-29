@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { documentsApi, DocumentQueryParams } from '@/api/documentsApi';
 import { Document, DocumentType, ProcessingStatus } from '@/types';
 import { useAuthStore } from '@/store/authStore';
+import { showErrorToast } from '@/utils/errorHandler';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Breadcrumb } from '@/components/common/Breadcrumb';
@@ -14,6 +15,7 @@ import { VStack } from '@/components/common/Spacing';
 
 export const DocumentsList: React.FC = () => {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { user } = useAuthStore();
 
     const [filters, setFilters] = useState<DocumentQueryParams>({
@@ -22,7 +24,7 @@ export const DocumentsList: React.FC = () => {
         ordering: '-uploaded_at',
     });
 
-    const { data, isLoading, refetch } = useQuery({
+    const { data, isLoading } = useQuery({
         queryKey: ['documents', filters],
         queryFn: () => documentsApi.getDocuments(filters),
     });
@@ -92,10 +94,11 @@ export const DocumentsList: React.FC = () => {
         try {
             await documentsApi.deleteDocument(id);
             toast.success('Document deleted successfully');
-            refetch();
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.error?.message || 'Failed to delete document';
-            toast.error(errorMessage);
+            // Invalidate queries to trigger automatic refetch
+            queryClient.invalidateQueries({ queryKey: ['documents'] });
+            queryClient.invalidateQueries({ queryKey: ['processing-status'] });
+        } catch (error) {
+            showErrorToast(error, 'Failed to delete document');
             console.error('Failed to delete document:', error);
         }
     };

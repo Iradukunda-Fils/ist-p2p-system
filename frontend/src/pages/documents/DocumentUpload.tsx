@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { documentsApi, DocumentUploadData } from '@/api/documentsApi';
 import { DocumentType } from '@/types';
@@ -7,7 +7,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { showErrorToast, showSuccessToast } from '@/utils/errorHandler';
 import { logger } from '@/utils/logger';
 import { FILE_UPLOAD } from '@/utils/constants';
-import { useTaskStatus } from '@/hooks/useTaskStatus';
+
 
 type UploadState = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
 
@@ -21,6 +21,7 @@ export const DocumentUpload: React.FC = () => {
     const [documentId, setDocumentId] = useState<string | undefined>(undefined);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadError, setUploadError] = useState<string | undefined>(undefined);
+    const [processingStartTime, setProcessingStartTime] = useState<number | null>(null);
     const [formData, setFormData] = useState<{
         file: File | null;
         doc_type: DocumentType;
@@ -31,44 +32,23 @@ export const DocumentUpload: React.FC = () => {
         title: '',
     });
 
-    // Task status tracking with real-time polling
-    const { 
-        data: taskData, 
-        isLoading: taskIsLoading,
-        isComplete: taskIsComplete 
-    } = useTaskStatus({
-        taskId: taskId || null,
-        enabled: !!taskId && uploadState === 'processing',
-        onComplete: (data) => {
-            if (data.successful && documentId) {
-                showSuccessToast('Document processed successfully!');
-                setUploadState('success');
-                
-                // Redirect after brief delay
-                setTimeout(() => {
-                    logger.info(`Processing complete, redirecting to /documents/${documentId}`, { context: 'Upload' });
-                    navigate(`/documents/${documentId}`);
-                }, 800);
-            }
-        },
-        onError: (error) => {
-            setUploadState('error');
-            setUploadError(error.message || 'Processing failed');
-            showErrorToast(error.message || 'Document processing failed');
-        }
-    });
+    // Fetch document status while processing to show backend state
+    // We use a single query for this, removing the duplicate declaration below
+    // REMOVED: No longer polling for status on this page
+    
+    // Task status tracking with real-time polling and timeout protection
+    // REMOVED: No longer waiting for task completion on this page
 
+    // Poll document status as secondary check (fallback if task status fails)
+    // REMOVED: No longer polling for status on this page
 
+    // Monitor document status for completion (dual-layer check)
+    // REMOVED: No longer monitoring status on this page
 
     const getProgressPercentage = (): number => {
         if (uploadState === 'uploading') {
+            // Upload phase: 0-100%
             return uploadProgress;
-        } else if (uploadState === 'processing') {
-            const status = taskData?.status;
-            if (status === 'PENDING') return 100; // Upload complete, waiting to process
-            if (status === 'STARTED') return 50; // Processing
-            if (status === 'SUCCESS') return 100;
-            return 50; // Default processing state
         } else if (uploadState === 'success') {
             return 100;
         }
@@ -88,6 +68,7 @@ export const DocumentUpload: React.FC = () => {
         setDocumentId(undefined);
         setUploadState('idle');
         setUploadProgress(0);
+        setProcessingStartTime(null);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -130,25 +111,37 @@ export const DocumentUpload: React.FC = () => {
             
             // If task tracking is needed
             if (response.task_id) {
-                setTaskId(response.task_id);
-                setUploadState('processing');
-                logger.info(`Tracking processing task: ${response.task_id}`, { context: 'Upload' });
-            } else {
-                // No processing needed, redirect immediately
-                setUploadState('success');
-                showSuccessToast('Document uploaded successfully!');
-                setTimeout(() => {
-                    if (docId) {
-                        navigate(`/documents/${docId}`);
-                    } else {
-                        navigate('/documents');
-                    }
-                }, 800);
+                logger.info(`Upload successful, task started: ${response.task_id}`, { context: 'Upload' });
             }
             
-        } catch (error) {
+            // Redirect immediately
+            setUploadState('success');
+            showSuccessToast('Document uploaded successfully!');
+            
+            setTimeout(() => {
+                if (docId) {
+                    navigate(`/documents/${docId}`);
+                } else {
+                    navigate('/documents');
+                }
+            }, 500);
+            
+        } catch (error: any) {
             logger.error('Upload error', error, { context: 'Upload' });
             setUploadState('error');
+            
+            // Handle 409 Duplicate File
+            if (error.response?.status === 409 && error.response?.data?.existing_document) {
+                const existingDoc = error.response.data.existing_document;
+                setUploadError(`This file already exists. Redirecting to existing document...`);
+                showErrorToast('File already exists. Redirecting...');
+                
+                setTimeout(() => {
+                    navigate(`/documents/${existingDoc.id}`);
+                }, 1500);
+                return;
+            }
+
             setUploadError(error instanceof Error ? error.message : 'Failed to upload document');
             showErrorToast(error, 'Failed to upload document');
         }
@@ -172,26 +165,22 @@ export const DocumentUpload: React.FC = () => {
                     <div className="mb-6 bg-white rounded-lg shadow-md p-6">
                         <div className="flex items-center justify-between mb-3">
                             <span className="text-sm font-medium text-gray-700">
-                                {uploadState === 'uploading' ? 'Uploading...' : 'Processing document...'}
+                                {uploadState === 'uploading' ? 'Uploading...' : 'Upload Complete'}
                             </span>
-                            <span className="text-sm font-semibold text-blue-600">{progress}%</span>
+                            <span className="text-sm font-semibold text-blue-500">{progress}%</span>
                         </div>
                         
-                        {/* Progress Bar */}
-                        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        {/* Progress Bar - Light Blue Theme */}
+                        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
                             <div 
-                                className={`h-full transition-all duration-300 ease-out ${
-                                    uploadState === 'uploading' ? 'bg-blue-600' : 'bg-green-600'
-                                } ${uploadState === 'processing' ? 'animate-pulse' : ''}`}
+                                className={`h-full transition-all duration-500 ease-out bg-gradient-to-r ${
+                                    uploadState === 'uploading' 
+                                        ? 'from-blue-300 via-blue-400 to-blue-500' 
+                                        : 'from-blue-400 via-blue-500 to-blue-600'
+                                }`}
                                 style={{ width: `${progress}%` }}
                             />
                         </div>
-
-                        {uploadState === 'processing' && (
-                            <p className="mt-3 text-xs text-gray-500 text-center">
-                                Extracting metadata and processing content...
-                            </p>
-                        )}
                     </div>
                 )}
 

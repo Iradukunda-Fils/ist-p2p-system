@@ -112,7 +112,9 @@ fi
 # ============================================================================
 echo -e "${YELLOW}[4/6] Checking superuser creation...${NC}"
 
-if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ]; then
+if [ "${SKIP_MIGRATIONS:-false}" = "true" ] || [ "${SKIP_SUPERUSER:-false}" = "true" ]; then
+    echo "Skipping superuser creation (SKIP_MIGRATIONS or SKIP_SUPERUSER is set)"
+elif [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ]; then
     echo "Creating superuser if not exists..."
     
     python manage.py shell << EOF

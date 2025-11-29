@@ -79,6 +79,16 @@ def extract_document_metadata(self, document_id: str) -> Dict[str, Any]:
         
         logger.info(f"Starting processing for document {document_id} ({document.original_filename})")
         
+        # Update state to show task is actively processing
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'document_id': document_id,
+                'stage': 'starting',
+                'progress': 0
+            }
+        )
+        
         # Update status to processing
         document.processing_status = 'PROCESSING'
         document.save(update_fields=['processing_status', 'updated_at'])
@@ -86,6 +96,15 @@ def extract_document_metadata(self, document_id: str) -> Dict[str, Any]:
         # Step 1: Extract text
         extracted_text = ""
         try:
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'document_id': document_id,
+                    'stage': 'extracting_text',
+                    'progress': 25
+                }
+            )
+            
             if document.is_pdf:
                 extracted_text = extract_text_from_pdf(document)
             elif document.is_image:
@@ -100,6 +119,15 @@ def extract_document_metadata(self, document_id: str) -> Dict[str, Any]:
         # Step 2: Extract structured metadata
         metadata = {}
         try:
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'document_id': document_id,
+                    'stage': 'extracting_metadata',
+                    'progress': 50
+                }
+            )
+            
             if document.doc_type == 'PROFORMA':
                 metadata = extract_proforma_metadata(extracted_text, document)
             elif document.doc_type == 'RECEIPT':
@@ -116,6 +144,15 @@ def extract_document_metadata(self, document_id: str) -> Dict[str, Any]:
         # Step 3: Fallback to LLM if extraction was poor
         if should_use_llm_fallback(extracted_text, metadata):
             try:
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'document_id': document_id,
+                        'stage': 'llm_enhancement',
+                        'progress': 75
+                    }
+                )
+                
                 llm_result = extract_with_llm.delay(document_id, extracted_text, document.doc_type).get()
                 if llm_result and not llm_result.get('error'):
                     metadata.update(llm_result.get('metadata', {}))
@@ -125,6 +162,15 @@ def extract_document_metadata(self, document_id: str) -> Dict[str, Any]:
                 metadata['llm_fallback_error'] = str(e)
         
         # Update document with results
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'document_id': document_id,
+                'stage': 'finalizing',
+                'progress': 95
+            }
+        )
+        
         document.mark_processing_completed(
             extracted_text=extracted_text,
             metadata=metadata
@@ -132,12 +178,17 @@ def extract_document_metadata(self, document_id: str) -> Dict[str, Any]:
         
         logger.info(f"Successfully processed document {document_id}")
         
-        return {
+        # Return success result - this ensures Celery marks task as SUCCESS
+        result = {
+            'success': True,
             'document_id': document_id,
             'status': 'completed',
             'text_length': len(extracted_text),
-            'metadata_keys': list(metadata.keys())
+            'metadata_keys': list(metadata.keys()),
+            'processing_status': 'COMPLETED'
         }
+        
+        return result
         
     except Exception as exc:
         logger.error(f"Document processing failed for {document_id}: {exc}")
@@ -150,13 +201,20 @@ def extract_document_metadata(self, document_id: str) -> Dict[str, Any]:
         except Exception:
             pass
         
-        # Retry with exponential backoff
+        # Retry with exponential backoff (only on transient errors)
         if self.request.retries < self.max_retries:
             countdown = 60 * (2 ** self.request.retries)
             logger.info(f"Retrying document processing for {document_id} in {countdown} seconds")
             raise self.retry(countdown=countdown, exc=exc)
         
-        return {'error': str(exc), 'document_id': document_id}
+        # Final failure - return error result so task is marked as FAILURE
+        return {
+            'success': False,
+            'error': str(exc),
+            'document_id': document_id,
+            'status': 'failed',
+            'processing_status': 'FAILED'
+        }
 
 
 @shared_task(bind=True, max_retries=2)

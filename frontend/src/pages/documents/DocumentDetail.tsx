@@ -55,6 +55,9 @@ const DocumentDetail: React.FC = () => {
     const deleteMutation = useMutation({
         mutationFn: () => documentsApi.deleteDocument(id!),
         onSuccess: () => {
+            // Invalidate documents list cache so it reloads without deleted document
+            queryClient.invalidateQueries({ queryKey: ['documents'] });
+            queryClient.invalidateQueries({ queryKey: ['processing-status'] });
             navigate('/documents');
         },
     });

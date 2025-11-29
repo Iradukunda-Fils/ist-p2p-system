@@ -27,18 +27,28 @@ def get_task_status(request, task_id):
         # Get task result using AsyncResult
         task_result = AsyncResult(task_id, app=celery_app)
         
+        # Check if task is in a terminal state
+        terminal_states = ['SUCCESS', 'FAILURE', 'REVOKED']
+        is_terminal = task_result.state in terminal_states
+        
         response_data = {
             'task_id': task_id,
             'status': task_result.state,
-            'ready': task_result.ready(),
-            'successful': task_result.successful() if task_result.ready() else None,
-            'failed': task_result.failed() if task_result.ready() else None,
+            'ready': task_result.ready() or is_terminal,  # Force ready=True for terminal states
+            'successful': task_result.successful() if (task_result.ready() or is_terminal) else None,
+            'failed': task_result.failed() if (task_result.ready() or is_terminal) else None,
         }
         
         # Add result if task is complete
-        if task_result.ready():
+        if task_result.ready() or is_terminal:
             if task_result.successful():
-                response_data['result'] = task_result.result
+                result = task_result.result
+                response_data['result'] = result
+                
+                # If result contains success flag, use it
+                if isinstance(result, dict) and 'success' in result:
+                    response_data['successful'] = result.get('success', True)
+                    
             elif task_result.failed():
                 # Handle exception info
                 try:
@@ -47,10 +57,10 @@ def get_task_status(request, task_id):
                 except Exception:
                     response_data['error'] = 'Task failed with unknown error'
         
-        # Add task metadata if available
+        # Add task metadata if available (for PROGRESS state)
         if task_result.info:
             if isinstance(task_result.info, dict):
-                # For pending tasks, info might contain progress data
+                # For pending/progress tasks, info might contain progress data
                 response_data['info'] = task_result.info
             else:
                 # For failed tasks, info contains the exception
