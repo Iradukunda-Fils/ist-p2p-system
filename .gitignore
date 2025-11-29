@@ -55,3 +55,4 @@ build/
 # Environment
 .env
 .env.backup  
+.env.production 
