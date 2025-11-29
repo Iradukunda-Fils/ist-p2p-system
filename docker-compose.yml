@@ -156,7 +156,7 @@ services:
       --chdir /app/src
       config.wsgi:application
     volumes:
-      - ./backend/keys:/app/keys:ro
+      - asymetric_keys:/app/keys
       - static_files:/app/src/staticfiles
       - media_files:/app/media
       - backend_logs:/app/logs
@@ -210,7 +210,7 @@ services:
       --time-limit=300
       --soft-time-limit=240
     volumes:
-      - ./backend/keys:/app/keys:ro
+      - asymetric_keys:/app/keys
       - media_files:/app/media
       - backend_logs:/app/logs
     environment:
@@ -248,7 +248,7 @@ services:
     image: iradukunda84/p2p_celery_beat:1.0.1
     command: celery -A config beat --loglevel=${CELERY_BEAT_LOG_LEVEL:-info} --pidfile=/tmp/celerybeat.pid
     volumes:
-      - ./backend/keys:/app/keys:ro
+      - asymetric_keys:/app/keys
       - backend_logs:/app/logs
     environment:
       <<: *back_environ
@@ -394,6 +394,8 @@ volumes:
   static_files:
     driver: local
   media_files:
+    driver: local
+  asymetric_keys:
     driver: local
   backend_logs:
     driver: local

@@ -1,17 +1,20 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { documentsApi } from '@/api/documentsApi';
+import { documentsApi, ProcessingStatusSummary } from '@/api/documentsApi';
+import { usePollingControl } from '@/hooks/useRealtimeData';
 
 /**
  * Document Processing Status Widget
  * Shows real-time document processing pipeline status
  */
 export const ProcessingStatusWidget: React.FC = () => {
-    const { data, isLoading, error } = useQuery({
+    const pollingControl = usePollingControl();
+
+    const { data, isLoading, error } = useQuery<ProcessingStatusSummary>({
         queryKey: ['processing-status'],
         queryFn: () => documentsApi.getProcessingStatus(),
-        refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
+        refetchInterval: pollingControl.isEnabled ? pollingControl.interval : false,
         refetchIntervalInBackground: true, // Continue polling in background
         staleTime: 5000, // Consider data stale after 5 seconds
     });
