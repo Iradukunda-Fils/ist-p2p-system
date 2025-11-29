@@ -14,6 +14,8 @@ x-backend-environment: &back_environ
   DEBUG: ${DEBUG:-False}
   ENVIRONMENT: ${ENVIRONMENT:-production}
   
+  X_FRAME_OPTIONS: ${X_FRAME_OPTIONS:-DENY}
+  
   # Database
   DATABASE_URL: postgresql://${DATABASE_USER:-postgres}:${DATABASE_PASSWORD:-postgres}@db:5432/${DATABASE_NAME:-p2p_procurement}
   DATABASE_NAME: ${DATABASE_NAME:-p2p_procurement}
@@ -156,7 +158,7 @@ services:
       --chdir /app/src
       config.wsgi:application
     volumes:
-      - asymetric_keys:/app/keys
+      - ./backend/keys:/app/keys
       - static_files:/app/src/staticfiles
       - media_files:/app/media
       - backend_logs:/app/logs
@@ -210,7 +212,7 @@ services:
       --time-limit=300
       --soft-time-limit=240
     volumes:
-      - asymetric_keys:/app/keys
+      - ./backend/keys:/app/keys
       - media_files:/app/media
       - backend_logs:/app/logs
     environment:
@@ -248,7 +250,7 @@ services:
     image: iradukunda84/p2p_celery_beat:1.0.1
     command: celery -A config beat --loglevel=${CELERY_BEAT_LOG_LEVEL:-info} --pidfile=/tmp/celerybeat.pid
     volumes:
-      - asymetric_keys:/app/keys
+      - ./backend/keys:/app/keys
       - backend_logs:/app/logs
     environment:
       <<: *back_environ
@@ -394,8 +396,6 @@ volumes:
   static_files:
     driver: local
   media_files:
-    driver: local
-  asymetric_keys:
     driver: local
   backend_logs:
     driver: local

@@ -126,7 +126,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - asymetric_keys:/app/keys
+      - ./backend/keys:/app/keys
       - backend_logs:/app/logs
       - static_volume:/app/staticfiles
       - media_volume:/app/media
@@ -169,7 +169,7 @@ services:
       --loglevel=${CELERY_WORKER_LOG_LEVEL:-info}
       --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
     volumes:
-      - asymetric_keys:/app/keys
+      - ./backend/keys:/app/keys
       - backend_logs:/app/logs
       - media_volume:/app/media
     tmpfs:
@@ -203,7 +203,7 @@ services:
     container_name: p2p_celery_beat_prod
     command: celery -A config beat --loglevel=${CELERY_BEAT_LOG_LEVEL:-info}
     volumes:
-      - asymetric_keys:/app/keys
+      - ./backend/keys:/app/keys
       - backend_logs:/app/logs
     tmpfs:
       - /var/log/p2p
@@ -319,7 +319,6 @@ volumes:
   redis_data:
   static_volume:
   media_volume:
-  asymetric_keys:
   backend_logs:
   nginx_logs:
 

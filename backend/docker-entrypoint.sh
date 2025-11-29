@@ -25,20 +25,29 @@ echo "========================================"
 # ============================================================================
 echo -e "${YELLOW}[1/7] Checking JWT keys...${NC}"
 
-# Create keys directory only if it doesn't exist (it may be a mount point)
-if [ ! -d /app/keys ]; then
-    mkdir -p /app/keys
+KEYS_PATH="/app/keys"
+
+# Create directory if not exists
+if [ ! -d "$KEYS_PATH" ]; then
+    mkdir -p "$KEYS_PATH"
+    chmod 770 "$KEYS_PATH"
 fi
 
-if [ ! -f /app/keys/jwt_private.pem ]; then
+# Generate private key if missing
+if [ ! -f "$KEYS_PATH/jwt_private.pem" ]; then
     echo "Generating new JWT private key..."
-    openssl genrsa -out /app/keys/jwt_private.pem 2048
+    openssl genrsa -out "$KEYS_PATH/jwt_private.pem" 2048
+    chmod 600 "$KEYS_PATH/jwt_private.pem"
 fi
 
-if [ ! -f /app/keys/jwt_public.pem ]; then
+# Generate public key if missing
+if [ ! -f "$KEYS_PATH/jwt_public.pem" ]; then
     echo "Generating new JWT public key..."
-    openssl rsa -in /app/keys/jwt_private.pem -outform PEM -pubout -out /app/keys/jwt_public.pem
+    openssl rsa -in "$KEYS_PATH/jwt_private.pem" -pubout -out "$KEYS_PATH/jwt_public.pem"
+    chmod 644 "$KEYS_PATH/jwt_public.pem"
 fi
+
+
 
 echo -e "${GREEN}✓ JWT keys ready${NC}"
 
